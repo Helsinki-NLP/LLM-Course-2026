@@ -1,0 +1,25 @@
+seed: 1234
+data_dir: data/smoke-tokens
+output_dir: runs/smoke
+
+model:
+  max_seq_len: 64
+  n_layer: 2
+  n_head: 4
+  n_embd: 64
+  dropout: 0.0
+  tie_embeddings: true
+
+training:
+  batch_size: 4
+  gradient_accumulation: 1
+  train_tokens: 8192
+  learning_rate: 0.001
+  min_learning_rate: 0.0001
+  warmup_steps: 2
+  weight_decay: 0.1
+  gradient_clip: 1.0
+  log_interval: 5
+  eval_interval: 10
+  eval_batches: 2
+  eval_batch_size: 4

@@ -1,0 +1,6 @@
+{"id":"test-001","premise":"A puppy rests in a basket near the fireplace.","hypothesis":"An animal is resting.","label":"entailment"}
+{"id":"test-002","premise":"A scientist reads notes beside a microscope.","hypothesis":"A person is reading.","label":"entailment"}
+{"id":"test-003","premise":"A bicycle is locked outside a station.","hypothesis":"Its owner might be on a train.","label":"neutral"}
+{"id":"test-004","premise":"A family eats dinner on a balcony.","hypothesis":"They could live in a city.","label":"neutral"}
+{"id":"test-005","premise":"The concert hall is empty.","hypothesis":"Nobody is absent from the concert hall.","label":"contradiction"}
+{"id":"test-006","premise":"A brown horse stands inside the fence.","hypothesis":"The horse is not inside the fence.","label":"contradiction"}

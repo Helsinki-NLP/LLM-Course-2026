@@ -1,0 +1,22 @@
+# This is a planning aid, not an intermediate submission.
+task:
+  name: ""
+  input: ""
+  desired_output: ""
+  primary_metric: ""
+
+models:
+  base_model: ""
+  instruct_model: ""
+  reason_for_choice: ""
+
+data:
+  training_or_prompt_development_set: ""
+  validation_set: ""
+  held_out_test_set: ""
+  licence: ""
+
+reproducibility:
+  random_seed: 1234
+  environment_file: requirements.txt
+  notes: ""

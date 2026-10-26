@@ -1,0 +1,25 @@
+seed: 1234
+data_dir: data/tokens-32k
+output_dir: runs/medium
+
+model:
+  max_seq_len: 512
+  n_layer: 6
+  n_head: 5
+  n_embd: 320
+  dropout: 0.0
+  tie_embeddings: true
+
+training:
+  batch_size: 128
+  gradient_accumulation: 1
+  train_tokens: 1000000000
+  learning_rate: 0.0008
+  min_learning_rate: 0.00008
+  warmup_steps: 100
+  weight_decay: 0.1
+  gradient_clip: 1.0
+  log_interval: 20
+  eval_interval: 200
+  eval_batches: 20
+  eval_batch_size: 64

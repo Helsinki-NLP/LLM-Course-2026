@@ -1,0 +1,64 @@
+{
+  "experiment_name": "lab2-roihu-qwen",
+  "seed": 2026,
+  "backend": "huggingface",
+  "output_dir": "results/roihu",
+  "task": {
+    "name": "bundled-nli",
+    "labels": ["entailment", "neutral", "contradiction"]
+  },
+  "data": {
+    "train": "data/task/train.jsonl",
+    "dev": "data/task/dev.jsonl",
+    "test": "data/task/test.jsonl",
+    "knowledge": "data/general_knowledge.jsonl",
+    "knowledge_limit": 50
+  },
+  "models": {
+    "base": {
+      "id": "Qwen/Qwen3.5-0.8B-Base",
+      "revision": "main",
+      "trust_remote_code": false
+    },
+    "instruct": {
+      "id": "Qwen/Qwen3.5-0.8B",
+      "revision": "main",
+      "trust_remote_code": false
+    },
+    "sft": {
+      "id": "Qwen/Qwen3.5-0.8B",
+      "revision": "main",
+      "trust_remote_code": false
+    }
+  },
+  "prompting": {
+    "few_shot_count": 5
+  },
+  "decoding": {
+    "strategy": "greedy",
+    "temperature": 0,
+    "do_sample": false,
+    "num_beams": 1,
+    "max_new_tokens": 32
+  },
+  "training": {
+    "adapter_dir": "results/roihu/adapter",
+    "lora_r": 16,
+    "lora_alpha": 32,
+    "lora_dropout": 0.05,
+    "target_modules": "all-linear",
+    "learning_rate": 0.0002,
+    "lr_scheduler_type": "cosine",
+    "warmup_ratio": 0.03,
+    "num_train_epochs": 2,
+    "per_device_train_batch_size": 8,
+    "per_device_eval_batch_size": 8,
+    "gradient_accumulation_steps": 2,
+    "max_length": 1024,
+    "logging_steps": 10,
+    "eval_steps": 50
+  },
+  "plot": {
+    "format": "png"
+  }
+}

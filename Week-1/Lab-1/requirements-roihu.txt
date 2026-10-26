@@ -1,0 +1,8 @@
+# PyTorch comes from Roihu's module; do not install a second CUDA build with pip.
+datasets>=4.0
+huggingface-hub>=0.35
+matplotlib>=3.8
+numpy>=1.26
+PyYAML>=6.0
+tokenizers>=0.21
+transformers>=4.57

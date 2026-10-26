@@ -1,0 +1,9 @@
+# Local or non-module installation. For Roihu use requirements-roihu.txt.
+torch>=2.6,<3
+transformers>=4.57,<6
+datasets>=3.2,<5
+accelerate>=1.2,<2
+trl>=0.24,<2
+peft>=0.14,<1
+matplotlib>=3.8,<4
+safetensors>=0.4,<1

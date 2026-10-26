@@ -1,0 +1,33 @@
+# Varied prompts reduce accidental prefix-cache reuse. Add task-realistic prompts of similar length.
+Summarize why a fixed output length matters in an inference benchmark.
+Explain the difference between prefill and decode in two short paragraphs.
+List practical checks to run before measuring a model server.
+Describe a latency-throughput trade-off for an interactive assistant.
+Write a concise explanation of continuous batching.
+Compare median latency with p95 latency for a service operator.
+Explain why streaming is necessary when measuring time to first token.
+Describe one reason quantization may affect a non-English task.
+Give a short example of a JSON schema for a classification response.
+Explain why raw per-request observations should be retained.
+Describe how a warm-up phase changes benchmark interpretation.
+Explain why changing model length and precision together is a bad comparison.
+Summarize the role of the KV cache in concurrent inference.
+Describe what output tokens per second measures.
+Explain why a held-out scorer must remain unchanged across configurations.
+Give two causes of an invalid structured model response.
+Describe one benefit and one cost of constrained decoding.
+Explain why the number of benchmark requests belongs in the results.
+Summarize how FP8 can free memory for concurrent requests.
+Explain the difference between task accuracy and output validity.
+Describe a useful service-level target for a chat application.
+Explain why model and tokenizer revisions should be recorded.
+Give a brief deployment recommendation for a batch NLP pipeline.
+Describe how one-command restartability improves reproducibility.
+Explain why GPU measurements should not be run on a login node.
+Summarize why mean latency can hide a poor user experience.
+Describe what should remain fixed in a bf16 versus FP8 comparison.
+Explain how request concurrency differs from a sequential loop.
+Give one caveat when using a mock server for local testing.
+Describe how to verify that a LoRA adapter is visible to vLLM.
+Explain why content quality must be scored after quantization.
+Summarize the purpose of an experiment manifest.

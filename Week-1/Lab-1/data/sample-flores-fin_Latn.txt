@@ -1,0 +1,4 @@
+Opiskelijat vertaavat useita tokenisoijia samoilla lauseilla.
+Kielimallit oppivat tilastollisia rakenteita suurista tekstikokoelmista.
+Huolellisissa kokeissa aineisto ja opetusbudjetti pidetään samoina.
+Loppuraportti selittää sekä menetelmän että tulokset.

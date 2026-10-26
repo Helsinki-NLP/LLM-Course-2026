@@ -1,0 +1,2 @@
+# Client-side Lab 3 code has no third-party Python dependencies.
+# Use Roihu's python-vllm module; do not pip-install torch or vLLM here.

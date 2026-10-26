@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+data/*.bin
+data/tokens*/
+data/smoke-tokens/
+logs/
+runs/
+results/smoke-*
+tokenizers/
+tokenizers-smoke/

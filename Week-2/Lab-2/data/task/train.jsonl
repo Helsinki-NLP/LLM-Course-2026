@@ -1,0 +1,12 @@
+{"id":"train-001","premise":"A dog is sleeping on a blue rug.","hypothesis":"An animal is resting on a rug.","label":"entailment"}
+{"id":"train-002","premise":"A woman is reading a novel beside a window.","hypothesis":"A person is reading a book.","label":"entailment"}
+{"id":"train-003","premise":"Two cyclists ride along a forest road.","hypothesis":"People are riding bicycles.","label":"entailment"}
+{"id":"train-004","premise":"A chef slices tomatoes in a restaurant kitchen.","hypothesis":"Someone is preparing food.","label":"entailment"}
+{"id":"train-005","premise":"A child is building a tower from wooden blocks.","hypothesis":"The child might be at home.","label":"neutral"}
+{"id":"train-006","premise":"A red car is parked beside the library.","hypothesis":"The driver is reading inside the library.","label":"neutral"}
+{"id":"train-007","premise":"Three friends are talking in a cafe.","hypothesis":"They could be discussing their work.","label":"neutral"}
+{"id":"train-008","premise":"A musician carries a violin case onto a train.","hypothesis":"The musician will perform tonight.","label":"neutral"}
+{"id":"train-009","premise":"A child is standing beside an empty swimming pool.","hypothesis":"The child is not near a pool.","label":"contradiction"}
+{"id":"train-010","premise":"Nobody is sitting on the empty bench.","hypothesis":"A person is sitting on the bench.","label":"contradiction"}
+{"id":"train-011","premise":"The shop is open and customers are entering.","hypothesis":"The shop is not open.","label":"contradiction"}
+{"id":"train-012","premise":"A black cat is under the table.","hypothesis":"No animal is under the table.","label":"contradiction"}

@@ -1,0 +1,50 @@
+{"id":"gk-001","question":"What is the capital of Finland?","choices":["Oslo","Helsinki","Stockholm","Tallinn"],"answer":"B"}
+{"id":"gk-002","question":"Which planet is closest to the Sun?","choices":["Mercury","Venus","Earth","Mars"],"answer":"A"}
+{"id":"gk-003","question":"At sea level, pure water freezes at what temperature on the Celsius scale?","choices":["-10","0","10","100"],"answer":"B"}
+{"id":"gk-004","question":"Who wrote the novel Pride and Prejudice?","choices":["Jane Austen","George Eliot","Mary Shelley","Virginia Woolf"],"answer":"A"}
+{"id":"gk-005","question":"Which gas is most abundant in Earth's atmosphere?","choices":["Oxygen","Carbon dioxide","Nitrogen","Hydrogen"],"answer":"C"}
+{"id":"gk-006","question":"What is 9 multiplied by 7?","choices":["54","56","63","72"],"answer":"C"}
+{"id":"gk-007","question":"Which organ pumps blood through the human body?","choices":["Lung","Liver","Kidney","Heart"],"answer":"D"}
+{"id":"gk-008","question":"On which continent is the Sahara Desert?","choices":["Asia","Africa","Australia","South America"],"answer":"B"}
+{"id":"gk-009","question":"What is the chemical symbol for gold?","choices":["Ag","Au","Fe","Gd"],"answer":"B"}
+{"id":"gk-010","question":"Which ocean is the largest by surface area?","choices":["Atlantic","Indian","Arctic","Pacific"],"answer":"D"}
+{"id":"gk-011","question":"How many sides does a hexagon have?","choices":["Five","Six","Seven","Eight"],"answer":"B"}
+{"id":"gk-012","question":"Who painted the Mona Lisa?","choices":["Vincent van Gogh","Claude Monet","Leonardo da Vinci","Pablo Picasso"],"answer":"C"}
+{"id":"gk-013","question":"Which language is primarily spoken in Brazil?","choices":["Spanish","Portuguese","French","Italian"],"answer":"B"}
+{"id":"gk-014","question":"What is the largest mammal?","choices":["African elephant","Blue whale","Giraffe","Hippopotamus"],"answer":"B"}
+{"id":"gk-015","question":"Which instrument commonly has 88 keys?","choices":["Violin","Flute","Piano","Trumpet"],"answer":"C"}
+{"id":"gk-016","question":"What process do plants use to turn light energy into chemical energy?","choices":["Respiration","Photosynthesis","Fermentation","Transpiration"],"answer":"B"}
+{"id":"gk-017","question":"Which country is home to the city of Kyoto?","choices":["China","South Korea","Japan","Thailand"],"answer":"C"}
+{"id":"gk-018","question":"What is the square root of 144?","choices":["10","11","12","14"],"answer":"C"}
+{"id":"gk-019","question":"Which metal is liquid near ordinary room temperature?","choices":["Iron","Mercury","Aluminium","Copper"],"answer":"B"}
+{"id":"gk-020","question":"Who formulated the three laws of motion commonly taught in physics?","choices":["Isaac Newton","Charles Darwin","Louis Pasteur","Nikola Tesla"],"answer":"A"}
+{"id":"gk-021","question":"Which is the smallest prime number?","choices":["0","1","2","3"],"answer":"C"}
+{"id":"gk-022","question":"What is the capital of Canada?","choices":["Toronto","Vancouver","Ottawa","Montreal"],"answer":"C"}
+{"id":"gk-023","question":"Which blood cells primarily carry oxygen?","choices":["Red blood cells","White blood cells","Platelets","Neurons"],"answer":"A"}
+{"id":"gk-024","question":"What is the longest river in South America?","choices":["Amazon","Parana","Orinoco","Madeira"],"answer":"A"}
+{"id":"gk-025","question":"Which composer wrote the Fifth Symphony whose opening is often rendered short-short-short-long?","choices":["Mozart","Beethoven","Bach","Chopin"],"answer":"B"}
+{"id":"gk-026","question":"What is H2O commonly called?","choices":["Salt","Water","Hydrogen peroxide","Oxygen"],"answer":"B"}
+{"id":"gk-027","question":"Which layer of Earth is beneath the crust?","choices":["Inner core","Outer core","Mantle","Atmosphere"],"answer":"C"}
+{"id":"gk-028","question":"Who is the author of Nineteen Eighty-Four?","choices":["Aldous Huxley","George Orwell","Ray Bradbury","H. G. Wells"],"answer":"B"}
+{"id":"gk-029","question":"Which country has the maple leaf on its national flag?","choices":["Canada","Austria","Denmark","Switzerland"],"answer":"A"}
+{"id":"gk-030","question":"What is 15 percent of 200?","choices":["15","20","30","40"],"answer":"C"}
+{"id":"gk-031","question":"Which vitamin is synthesized in human skin in response to sunlight?","choices":["Vitamin A","Vitamin B12","Vitamin C","Vitamin D"],"answer":"D"}
+{"id":"gk-032","question":"Which ancient civilization built Machu Picchu?","choices":["Maya","Aztec","Inca","Roman"],"answer":"C"}
+{"id":"gk-033","question":"What does CPU stand for in computing?","choices":["Central Processing Unit","Computer Primary Utility","Core Program User","Central Program Upload"],"answer":"A"}
+{"id":"gk-034","question":"Which natural satellite orbits Earth?","choices":["Phobos","Europa","The Moon","Titan"],"answer":"C"}
+{"id":"gk-035","question":"Which part of a cell contains most of its genetic material in eukaryotes?","choices":["Cell wall","Nucleus","Ribosome","Cytoplasm"],"answer":"B"}
+{"id":"gk-036","question":"What is the capital of New Zealand?","choices":["Auckland","Christchurch","Wellington","Hamilton"],"answer":"C"}
+{"id":"gk-037","question":"Which unit measures electrical resistance?","choices":["Volt","Ampere","Watt","Ohm"],"answer":"D"}
+{"id":"gk-038","question":"Who wrote the play Hamlet?","choices":["William Shakespeare","Oscar Wilde","Arthur Miller","Samuel Beckett"],"answer":"A"}
+{"id":"gk-039","question":"How many degrees are in the interior angles of a triangle in Euclidean geometry?","choices":["90","180","270","360"],"answer":"B"}
+{"id":"gk-040","question":"Which sea separates Europe and Africa?","choices":["Baltic Sea","Mediterranean Sea","Caribbean Sea","Bering Sea"],"answer":"B"}
+{"id":"gk-041","question":"Which element has atomic number 1?","choices":["Helium","Hydrogen","Oxygen","Carbon"],"answer":"B"}
+{"id":"gk-042","question":"What is the main currency of Japan?","choices":["Won","Yuan","Yen","Ringgit"],"answer":"C"}
+{"id":"gk-043","question":"Which scientist is associated with evolution by natural selection?","choices":["Charles Darwin","Gregor Mendel","Marie Curie","Niels Bohr"],"answer":"A"}
+{"id":"gk-044","question":"What is the largest internal organ in the human body?","choices":["Brain","Liver","Lung","Kidney"],"answer":"B"}
+{"id":"gk-045","question":"Which data structure follows first-in, first-out order?","choices":["Stack","Queue","Binary tree","Set"],"answer":"B"}
+{"id":"gk-046","question":"Which country contains the city of Marrakech?","choices":["Morocco","Egypt","Turkey","Jordan"],"answer":"A"}
+{"id":"gk-047","question":"What is the opposite of evaporation in the water cycle?","choices":["Sublimation","Condensation","Melting","Freezing"],"answer":"B"}
+{"id":"gk-048","question":"Which number is represented by the Roman numeral XL?","choices":["30","40","50","60"],"answer":"B"}
+{"id":"gk-049","question":"Which device converts sound waves into an electrical signal?","choices":["Loudspeaker","Microphone","Projector","Monitor"],"answer":"B"}
+{"id":"gk-050","question":"What is the capital of Argentina?","choices":["Santiago","Lima","Buenos Aires","Montevideo"],"answer":"C"}

@@ -1,0 +1,4 @@
+The students compare several tokenizers on the same sentences.
+Language models learn statistical patterns from large text collections.
+Careful experiments keep the data and training budget fixed.
+The final report explains both the method and the results.

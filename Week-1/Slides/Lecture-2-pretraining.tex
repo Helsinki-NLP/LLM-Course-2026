@@ -1,0 +1,3014 @@
+% =====================================================================
+%  LDA-T318 — Lecture 2 — Pretraining
+%  Thursday 29 October 2026, 16:15–17:45
+%  Build:  latexmk -xelatex main.tex
+% =====================================================================
+\documentclass[aspectratio=169,10pt]{beamer}
+
+% Path has no parent-directory step: Overleaf resolves \input from the project root and
+% will not read above it. Locally, the Makefile puts common/ on TEXINPUTS.
+\input{preamble.tex}
+
+\renewcommand{\lecturename}{Lecture 2 — Pretraining}
+\renewcommand{\lecturedate}{29 October 2026}
+
+\title{Pretraining}
+\subtitle{Lecture 2: data, training and scale}
+\author{Aarne Talman}
+\institute{\coursecode\ \textbar\ \coursename\ \textbar\ \courseinstitution}
+\date{29 October 2026}
+
+\begin{document}
+
+% =====================================================================
+\begin{frame}[plain,shrink=8]
+  \titlepage
+  \note{On Tuesday we examined what a trained language model does. Today we
+  look at how its weights are learned. The next-token loss is familiar; most
+  of the new material concerns the data pipeline, compute budget and training
+  system around it.
+
+  This is the most quantitative lecture in the course. We derive one
+  back-of-the-envelope equation, $C \approx 6ND$, and use it in Lab 1 and
+  again in week 3.}
+\end{frame}
+
+\coursemapframe{1}
+
+\begin{frame}{Lecture overview}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \begin{enumerate}
+        \item The training loop \hfill \textit{10 min}
+        \item Data \hfill \textit{20 min}
+        \item Scaling laws \hfill \textit{15 min}
+        \item Training at scale \hfill \textit{15 min}
+      \end{enumerate}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{enumerate}
+        \setcounter{enumi}{4}
+        \item Mid-training \hfill \textit{10 min}
+        \item What pretraining buys \hfill \textit{10 min}
+        \item Lab 1 briefing \hfill \textit{8 min}
+      \end{enumerate}
+    \end{column}
+  \end{columns}
+  \vfill
+  \begin{takeaway}
+    By the end of today you should be able to explain how a language model is
+    pretrained, estimate the compute and memory needed for a run, and identify
+    the main choices in its data recipe.
+  \end{takeaway}
+  \note{Say the timings out loud again. Section 2 is the longest, deliberately
+  so. Tell them that, because a twenty-minute block on data looks
+  disproportionate to anyone who thinks this field is about architecture.
+
+  The takeaway box is the promise. The three numbers are parameters, tokens
+  and hardware-hours, and we will do exactly that calculation twice.}
+\end{frame}
+
+% =====================================================================
+\section{The training loop}
+% =====================================================================
+
+\begin{frame}{Pretraining uses the same next-token objective}
+  \[
+    \mathcal{L}(\theta) \;=\; -\frac{1}{T}\sum_{t=1}^{T}
+      \log p_\theta\!\left(x_t \mid x_{<t}\right)
+  \]
+  \emph{In words:} walk through the text one token at a time, ask how much
+  probability the model gave to the token that actually came next, and average
+  the penalty for being wrong. Same cross-entropy as Tuesday, now over a few
+  trillion tokens.
+  \vspace{0.3em}
+
+  \key{Teacher forcing.} In training the model always conditions on the
+  \emph{true} prefix, never on its own predictions. Every position is a
+  supervised example, and the causal mask makes all of them computable in one
+  forward pass.
+  \vspace{0.3em}
+
+  So a sequence of 4096 tokens provides a prediction target at almost every
+  position, all computed in parallel.
+  \vspace{0.4em}
+  \small
+  \textbf{Why this matters:} unlike an RNN, a transformer can process all
+  training positions in parallel. Generation remains sequential; we return to
+  that difference in week 3.
+  \note{Open by writing the loss on the board and saying ``this is the same line
+  as Tuesday''. Be almost boring about it. Students arrive expecting
+  pretraining to involve some extra clever objective, and there is not one.
+
+  Teacher forcing is the term they need for the reading. Make the point that it
+  creates a train/test mismatch, since at inference the model conditions on its
+  own output, and that the mismatch is one honest explanation for why long
+  generations drift.
+
+  The 4096-examples-per-forward-pass framing is the one that usually gets a
+  visible reaction.}
+\end{frame}
+
+\begin{frame}[shrink=17]{Batches are measured in tokens}
+  In LLM training, batch size is usually reported in \key{tokens}. The useful
+  quantity is how many token positions contribute to one optimiser step.
+
+  \vspace{0.5em}
+  \centering
+  \begin{tabular}{@{}L{3.0cm} L{3.2cm} L{4.6cm}@{}}
+    \toprule
+    \textbf{Run} & \textbf{Tokens / step} & \textbf{Note}\\
+    \midrule
+    GPT-3 175B (2020) & 3.2M & fixed through training\\[0.3em]
+    Llama 3 405B (2024) & 4M \textrightarrow{} 8M \textrightarrow{} 16M & ramped, along with
+      sequence length 4k \textrightarrow{} 8k\\[0.3em]
+    Your Lab 1 run & 0.1M & one GPU, no accumulation needed\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.8em}
+  \raggedright
+  \textbf{Gradient accumulation} buys you a large batch on small hardware:
+  split the batch into several micro-batches, add up their gradients, and take
+  one step. With the loss scaled correctly, this approximates one larger batch,
+  subject to numerical and stochastic differences.
+  \vspace{0.4em}
+
+  \textbf{Batch ramping} starts small and grows. Early on the gradients are
+  large, so a noisy estimate is good enough and a small batch gets more out of
+  each token. Later the model needs the hardware efficiency of a big one.
+  \source{Brown et al.\ 2020; Grattafiori et al., \textit{The Llama 3 Herd of Models}, 2024.}
+  \note{The thing to land is the change of unit. If someone reports ``batch size
+  64'' for an LLM they have told you almost nothing, because you do not know the
+  sequence length.
+
+  Gradient accumulation is worth thirty seconds. It is the most useful trick
+  for anyone with one GPU, and they will use it in week 2.
+
+  The Llama 3 ramp is a nice concrete: 4M to 16M tokens per step, changed twice
+  during a 15T-token run, at 252M and 2.87T tokens.}
+\end{frame}
+
+\begin{frame}[shrink=12]{Why AdamW is commonly used}
+  Plain gradient descent takes the same size of step for every weight. AdamW
+  keeps \textbf{two running averages per weight} and uses them to size each
+  weight's step individually.
+  \vspace{0.4em}
+  \begin{columns}[T]
+    \begin{column}{0.53\textwidth}
+      \key{Momentum} --- the average of this weight's recent gradients. Smooths
+      out the noise from one batch to the next.
+      \vspace{0.4em}
+
+      \key{Second moment} --- the average of its recent gradients
+      \emph{squared}: how big this weight's gradients typically are.
+      \[
+        \text{step} \;=\; \text{learning rate} \times
+          \frac{\text{smoothed gradient}}{\text{typical gradient size}}
+      \]
+      \emph{In words:} divide each gradient by how large that weight's gradients
+      usually are, so every weight moves by a comparable \emph{relative} amount
+      whatever scale it lives on.
+    \end{column}
+    \begin{column}{0.47\textwidth}
+      \begin{block}{What it costs}
+        \small
+        Those two averages are two extra full-size copies of the model, held in
+        fp32.\\[0.4em]
+        That is \textbf{8 bytes per parameter} of optimiser state, about half
+        of the total training memory. It is the main reason a model you can
+        serve on one card still will not train on it.
+      \end{block}
+      \vspace{0.3em}
+      \small
+      The \key{W} is decoupled weight decay: shrink every weight a little
+      towards zero on each step, applied to the weights directly rather than
+      pushed through the gradient.
+    \end{column}
+  \end{columns}
+  \source{Loshchilov \& Hutter 2019; hyperparameters as used in GPT-3, Llama and
+          most open 2024--2026 recipes.}
+  \note{Do not derive Adam. Just insist on the two consequences: adaptivity is
+  what makes a single learning rate work across very differently scaled
+  parameter groups, and the two running averages cost eight bytes per
+  parameter.
+
+  The full update, if anyone wants it on the board. With $g_t$ the gradient at
+  step $t$: $m_t = \beta_1 m_{t-1} + (1-\beta_1) g_t$ is the momentum buffer and
+  $v_t = \beta_2 v_{t-1} + (1-\beta_2) g_t^2$ the second-moment buffer; after
+  bias correction to $\hat m_t, \hat v_t$ the parameter update is
+  $\theta_t = \theta_{t-1} - \eta(\hat m_t / (\sqrt{\hat v_t}+\epsilon) +
+  \lambda\theta_{t-1})$.
+
+  Why adaptivity matters: gradient magnitudes differ by orders of magnitude
+  between embeddings, attention projections and norms, so one global learning
+  rate cannot serve all of them. Dividing by the root second moment gives each
+  parameter its own effective step size.
+
+  Decoupled decay in full: the $\lambda\theta$ term acts on the parameters, not
+  folded into the gradient. Folded in, Adam's normalisation would make the decay
+  depend on gradient history, which nobody wants. That is the whole content of
+  the 2019 paper.
+
+  LLM hyperparameter convention: $\beta_1 = 0.9$, $\beta_2 = 0.95$ (not the
+  PyTorch default $0.999$, because long-horizon second-moment estimates adapt too
+  slowly on a trillion-token run), weight decay $\lambda = 0.1$.
+
+  They need to remember the eight bytes. It reappears in twenty minutes in the
+  memory accounting, and again in week 2 when we justify LoRA.}
+\end{frame}
+
+\begin{frame}{Keeping a training run stable}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{Gradient clipping.} If the gradient as a whole is longer than a
+      fixed threshold, almost always 1.0, scale it back down to that length.
+      One bad batch then costs you a single bounded step rather than the run.
+      \vspace{0.5em}
+
+      \textbf{Warmup.} AdamW's running averages are poor estimates for the first
+      few hundred steps, so start the learning rate near zero and ramp it up
+      over roughly 0.1--2\% of training.
+      \vspace{0.5em}
+
+      \textbf{QK-Norm.} From Tuesday: normalise the queries and keys inside
+      attention. Adopted mainly because it suppresses loss spikes.
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{z-loss}
+        \small
+        A small extra penalty that keeps the model's raw output scores from
+        drifting to ever-larger absolute values.
+        \vspace{0.3em}
+        That drift can build slowly and become expensive to correct late in a
+        run. PaLM introduced this technique, and some later large-model recipes
+        use it.
+      \end{block}
+      \vspace{0.3em}
+      \small
+      None of these make the model better. They are there so that the run
+      reaches the end.
+    \end{column}
+  \end{columns}
+  \source{Chowdhery et al., \textit{PaLM}, 2022; Raschka,
+          \textit{A Dream of Spring for Open-Weight LLMs}, Feb 2026, on QK-Norm.}
+  \note{Frame these as insurance. Each costs a little and buys a reduction in
+  the probability of a catastrophic run failure, which on a three-month job is
+  an excellent trade.
+
+  Precise forms if asked. Clipping: rescale the gradient whenever its Euclidean
+  norm $\|g\|_2$ exceeds $c$, with $c = 1.0$ standard. z-loss: add
+  $10^{-4}\log^2 Z$ to the objective, where $Z$ is the softmax normaliser over
+  the output vocabulary. Penalising $\log Z$ away from zero keeps the logits
+  from inflating. QK-Norm is RMSNorm applied to $q$ and $k$ before the dot
+  product.
+
+  Say the last line on the slide out loud. Experienced people read a training
+  recipe with that distinction in mind.}
+\end{frame}
+
+\begin{frame}{Learning-rate schedules: cosine versus WSD}
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[
+      width=10.4cm, height=4.4cm,
+      xlabel={\scriptsize training progress (\% of planned tokens)},
+      ylabel={\scriptsize LR / peak},
+      xlabel style={font=\scriptsize}, ylabel style={font=\scriptsize},
+      tick label style={font=\scriptsize},
+      xmin=0, xmax=100, ymin=0, ymax=1.15,
+      legend style={font=\scriptsize, draw=none, fill=none, at={(0.98,0.95)}, anchor=north east},
+      axis lines=left, no markers, grid=none,
+    ]
+      \addplot[UHBlue, thick] coordinates {
+        (0,0) (2,1) (10,0.98) (20,0.92) (30,0.83) (40,0.71) (50,0.58)
+        (60,0.45) (70,0.32) (80,0.21) (90,0.13) (100,0.10)};
+      \addlegendentry{warmup + cosine}
+      \addplot[UHOrange, thick, dashed] coordinates {
+        (0,0) (2,1) (20,1) (40,1) (60,1) (80,1) (85,0.72) (90,0.45)
+        (95,0.20) (100,0.02)};
+      \addlegendentry{warmup--stable--decay}
+    \end{axis}
+  \end{tikzpicture}
+  \vspace{0.3em}
+
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \small
+      \textbf{Cosine} needs the total token budget declared \emph{in advance}.
+      Stop early and you stop at a high learning rate, with a model that is
+      measurably worse than its loss curve suggests it should be.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \small
+      \textbf{WSD} holds the peak rate flat, then decays sharply at the end.
+      You can branch from \emph{any} point in the stable phase, anneal on a
+      different mixture, and get a finished model.
+    \end{column}
+  \end{columns}
+  \source{Hu et al., \textit{MiniCPM}, 2024; used in OLMo 2, SmolLM3 and
+          several recent open-model recipes.}
+  \note{WSD has become common partly for organisational reasons. A flat stable
+  phase means one pretraining run can be
+  forked into several finished models at different token budgets, and it means
+  you do not have to commit to a total budget on day one, which you could not
+  do anyway, because your cluster allocation will change.
+
+  Point at the end of the orange curve and say: that final decay is where
+  mid-training happens. We come back to it in section five.}
+\end{frame}
+
+\begin{frame}{Loss spikes}
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[
+      width=10.4cm, height=4.6cm,
+      xlabel={\scriptsize tokens seen (billions)},
+      ylabel={\scriptsize training loss},
+      xlabel style={font=\scriptsize}, ylabel style={font=\scriptsize},
+      tick label style={font=\scriptsize},
+      xmin=0, xmax=100, ymin=2, ymax=11,
+      axis lines=left, no markers,
+    ]
+      \addplot[UHBlue, thick] coordinates {
+        (0,10.9) (1,7.2) (2,6.1) (4,5.3) (6,4.9) (8,4.6) (10,4.4)
+        (14,4.1) (18,3.9) (22,3.75) (26,3.62) (30,3.52) (34,3.44)
+        (36,3.40) (37,3.38) (38,6.9) (39,5.2) (40,4.3) (41,3.85)
+        (42,3.60) (44,3.42) (46,3.34) (50,3.24) (55,3.14) (60,3.06)
+        (65,2.99) (70,2.93) (75,2.88) (80,2.83) (85,2.79) (90,2.75)
+        (95,2.72) (100,2.69)};
+      \node[lbl, anchor=west] at (axis cs:42,8.0) {spike at 38B tokens};
+      \draw[flow, draw=UHOrange] (axis cs:42,7.8) -- (axis cs:38.6,7.1);
+    \end{axis}
+  \end{tikzpicture}
+  \vspace{0.2em}
+
+  \begin{columns}[T]
+    \begin{column}{0.49\textwidth}
+      \small
+      \textbf{Causes}: a corrupted or pathological data shard; learning rate
+      too high for the current curvature; fp16 overflow; router collapse in an
+      MoE; a silently faulty GPU.
+    \end{column}
+    \begin{column}{0.49\textwidth}
+      \small
+      \textbf{Mitigations}: QK-Norm and z-loss up front; skip the offending
+      batches; roll back to a checkpoint about 100 steps earlier and skip
+      200--500 batches of data. PaLM did exactly that, about twenty times.
+    \end{column}
+  \end{columns}
+  \source{Chowdhery et al., \textit{PaLM}, 2022.}
+  \note{The PaLM detail is the one worth telling in full, because it is so
+  unglamorous. The team restarted from a checkpoint roughly a hundred steps
+  before each spike and skipped a few hundred data batches. Re-running the same
+  data from the same checkpoint reproduced the spike; skipping the data did not.
+  So the data was the culprit rather than the optimiser, and they never found
+  out which document.
+
+  Ask the room what they would do if a spike recovers on its own. The answer is
+  usually: nothing, but write down the step number, because the model quality
+  after a recovered spike is not always the same.
+
+  Clock check: should be around 16:25 here.}
+\end{frame}
+
+\begin{frame}{A healthy curve, and a comparison to avoid}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{What good looks like in Lab 1}
+      \begin{itemize}
+        \item a near-vertical drop in the first few hundred steps, as the model
+          learns the unigram distribution
+        \item a long, smooth, slowly flattening descent on a log-x axis
+        \item validation tracking training, with a gap that does not widen
+        \item no early flat plateau; if the loss stops improving almost
+          immediately, check the learning rate and data loader
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{gotcha}[A lower loss is not always a better model]
+        Cross-entropy is measured \textbf{per token}, so it is denominated in
+        whatever your tokenizer calls a token.
+        \vspace{0.3em}
+        A larger vocabulary gives you fewer, harder tokens per sentence, so an
+        equally good model records a \emph{higher} loss. Put more repetition in
+        the mixture and the loss drops even though the model is worse.
+        \vspace{0.3em}
+        Loss only compares within one tokenizer and one data mixture. Across
+        them, use \textbf{bits per byte}, or downstream accuracy.
+      \end{gotcha}
+    \end{column}
+  \end{columns}
+  \note{This gotcha is the direct continuation of Tuesday's perplexity gotcha
+  and it is exam material. In Lab 1 they will train the same architecture with
+  two or three vocabulary sizes and the temptation to rank them by validation
+  loss is overwhelming. Tell them explicitly: that ranking is meaningless, and
+  the lab asks for loss against compute at fixed tokenizer instead.
+
+  Bits per byte is the fix worth naming: divide the total negative log
+  likelihood by the number of UTF-8 bytes in the text rather than the number of
+  tokens, and the unit is tokenizer-independent.
+
+  The early-plateau warning is practical debugging advice. A run that barely
+  improves usually has a configuration or data problem.}
+\end{frame}
+
+% =====================================================================
+\section{Data}
+% =====================================================================
+
+\begin{frame}{The pipeline}
+  \centering
+  \begin{tikzpicture}[node distance=3mm]
+    \node[mod, minimum width=11mm, minimum height=10mm, font=\tiny] (s1) {crawl};
+    \node[mod, minimum width=11mm, minimum height=10mm, font=\tiny, right=of s1] (s2) {text\\extract};
+    \node[mod, minimum width=11mm, minimum height=10mm, font=\tiny, right=of s2] (s3) {lang\\ID};
+    \node[mod, minimum width=11mm, minimum height=10mm, font=\tiny, right=of s3] (s4) {dedup};
+    \node[modhi, minimum width=11mm, minimum height=10mm, font=\tiny, right=of s4] (s5) {quality\\filter};
+    \node[mod, minimum width=11mm, minimum height=10mm, font=\tiny, right=of s5] (s6) {PII};
+    \node[mod, minimum width=11mm, minimum height=10mm, font=\tiny, right=of s6] (s7) {decon-\\taminate};
+    \node[modhi, minimum width=11mm, minimum height=10mm, font=\tiny, right=of s7] (s8) {mixture};
+    \draw[flow] (s1) -- (s2); \draw[flow] (s2) -- (s3); \draw[flow] (s3) -- (s4);
+    \draw[flow] (s4) -- (s5); \draw[flow] (s5) -- (s6); \draw[flow] (s6) -- (s7);
+    \draw[flow] (s7) -- (s8);
+    \draw[decorate, decoration={brace, amplitude=4pt, mirror}, draw=UHGrey]
+      (s1.south west) -- (s8.south east)
+      node[midway, below=7pt, font=\scriptsize, color=UHGrey]
+      {roughly $100$\,TB of HTML per CommonCrawl snapshot
+       $\;\longrightarrow\;$ a few per cent survives};
+  \end{tikzpicture}
+  \vspace{1.2em}
+
+  Each stage removes unwanted material, but it can also remove useful text.
+  We will look at what each stage is for, where it can fail, and why the
+  trade-offs differ across languages.
+  \vfill
+  \begin{takeaway}
+    The data pipeline strongly affects what a model learns, yet model reports
+    often document it less fully than the architecture.
+  \end{takeaway}
+  \note{Put the belt up and read the eight stages aloud. Tell them we spend
+  twenty minutes here, a fifth of the lecture, and that the proportion is
+  honest: this is where the quality comes from.
+
+  The orange boxes are stages where model developers make especially
+  consequential choices. The other stages still require careful engineering.
+
+  Worth saying once: almost every frontier lab treats its data mixture as the
+  crown jewel. OLMo and FineWeb are the honourable exceptions, which is exactly
+  why our worked examples come from them.}
+\end{frame}
+
+\begin{frame}{Stage 1: the crawl}
+  \begin{columns}[T]
+    \begin{column}{0.54\textwidth}
+      \key{CommonCrawl} is a non-profit that has crawled the web roughly
+      monthly since 2008. Each snapshot is a few billion pages.
+      \vspace{0.5em}
+
+      It ships two formats, and the choice between them is the first quality
+      decision in the pipeline:
+      \begin{itemize}
+        \item \key{WARC} --- the raw HTTP response. Full HTML, headers, the lot.
+        \item \key{WET} --- CommonCrawl's own plain-text extraction, already done
+          for you.
+      \end{itemize}
+      \vspace{0.5em}
+      WET is convenient, but its extraction often leaves navigation bars,
+      cookie banners, footers and link farms in the text.
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{block}{Failure mode of this stage}
+        \small
+        You inherit somebody else's definition of what a web page says.
+        \vspace{0.4em}
+        Every serious 2024--2026 dataset --- FineWeb, RefinedWeb,
+        Dolma, HPLT --- starts from \textbf{WARC} and does its own extraction.
+        \vspace{0.4em}
+        The crawl is not neutral either. It respects \texttt{robots.txt}, and
+        it under-samples paywalled and login-gated text while over-sampling
+        whatever is cheap to serve.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \source{CommonCrawl; Penedo et al., \textit{The FineWeb Datasets}, 2024;
+          Penedo et al., \textit{RefinedWeb}, 2023.}
+  \note{The WARC-versus-WET choice looks like plumbing and decides quality,
+  which makes it the clearest example of its kind in the lecture. Teams that
+  used WET in 2021 and 2022 were effectively training on boilerplate.
+
+  Mention the sampling bias at the end. It is what makes the web a strange
+  corpus: it over-represents what is cheap and public, which is not the same
+  thing as what is good.}
+\end{frame}
+
+\begin{frame}{Stage 2: text extraction}
+  Turning HTML into the article, and only the article.
+  \vspace{0.6em}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \textbf{What must go}: navigation, sidebars, cookie notices, ``related
+      articles'', comment spam, licence footers, JavaScript.
+      \vspace{0.5em}
+
+      \textbf{What must stay}: the body text, in reading order, with paragraph
+      and list structure intact.
+      \vspace{0.5em}
+
+      \key{trafilatura} is the standard tool. FineWeb measured the swap
+      directly: WET $\to$ trafilatura on WARC improved downstream benchmark
+      scores on models trained on the output, at the cost of a slower and much
+      more expensive extraction step.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Failure mode of this stage}
+        \small
+        Extraction errors come in \textbf{systematic} patterns rather than at
+        random.
+        \vspace{0.4em}
+        A template that strips the first paragraph of every page on a large CMS
+        removes exactly the lead sentences, the densest text on the page,
+        across millions of documents at once.
+        \vspace{0.4em}
+        You will not notice this by sampling, because each individual document
+        still looks fine.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \source{Penedo et al., \textit{The FineWeb Datasets}, 2024; Barbaresi,
+          \textit{trafilatura}, 2021.}
+  \note{The failure mode is the point of the slide, and it foreshadows the
+  gotcha four slides from now. Extraction bugs correlate with site templates,
+  so they hit millions of documents in the same way, and the damaged documents
+  still read as plausible text.
+
+  The one-sentence version: at scale you can survive random corruption, but
+  systematic corruption follows the model all the way through.}
+\end{frame}
+
+\begin{frame}{Stage 3: language identification}
+  A classifier, usually fastText trained on Wikipedia and web text, gives each
+  document a language and a confidence. You keep what clears a threshold.
+
+  \vspace{0.5em}
+  \centering
+  \begin{tabular}{@{}L{3.2cm} L{7.8cm}@{}}
+    \toprule
+    \textbf{Where it breaks} & \textbf{Consequence}\\
+    \midrule
+    short documents & unreliable under about 20 words, so short texts vanish\\[0.25em]
+    code-switching & a Finnish post quoting English clears neither threshold\\[0.25em]
+    related languages & Danish/Bokm\aa{}l and Czech/Slovak get confused\\[0.25em]
+    the threshold itself & FineWeb keeps English above a confidence of 0.65\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.6em}
+  \raggedright
+  \small
+  Each threshold trades quality against quantity, and a smaller language cannot
+  give up quantity.
+  \source{Joulin et al., fastText, 2016; Penedo et al., \textit{The FineWeb Datasets}, 2024.}
+  \note{The threshold is the teaching point. Raise it and you lose data; lower
+  it and you take on noise. For English you can afford a confidence of 0.65
+  because there is more English than anyone can use. For Finnish, every point
+  of threshold you raise is data you cannot replace, so Finnish pipelines run
+  looser thresholds and then pay for it in noise.
+
+  The code-switching row is worth a beat for this audience: multilingual
+  speakers write mixed text constantly, and the standard pipeline treats that
+  as garbage.
+
+  Two rows that did not fit on the slide. Indonesian/Malay is another pair that
+  language ID routinely confuses. And code and maths get classified as whatever
+  natural language the comments happen to be in, or else as noise, which is one
+  reason code is usually sourced separately from GitHub rather than pulled out
+  of a web crawl.}
+\end{frame}
+
+\begin{frame}[shrink=7]{Stage 4: deduplication}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      Three levels, usually all three:
+      \begin{itemize}
+        \item \key{exact} --- hash the document, drop repeats. Cheap, catches
+          mirrors and reposts.
+        \item \key{near-duplicate} --- hash overlapping word sequences and
+          compare the hashes (MinHash and LSH), dropping pairs that share about
+          80\% of them. Catches templated and lightly edited pages.
+        \item \key{line-level} --- drop lines repeated across many documents.
+          This is what removes the surviving boilerplate.
+      \end{itemize}
+      \vspace{0.4em}
+      Why it helps: duplicated text is effectively upweighted, which inflates
+      memorisation and leaks test sets into training.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{The FineWeb surprise}
+        \small
+        Deduplicating \emph{globally} across all 96 CommonCrawl snapshots gave
+        \textbf{worse} models than deduplicating within each snapshot.
+        \vspace{0.4em}
+        Why: text that survives on the web across many years and many sites is
+        disproportionately \emph{good}. Aggressive global dedup removes it and
+        leaves a residue of unique, never-copied, low-quality pages.
+        \vspace{0.4em}
+        So more filtering does not always give you a better corpus.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \source{Lee et al., \textit{Deduplicating Training Data Makes LMs Better}, 2022;
+          Penedo et al., \textit{The FineWeb Datasets}, 2024.}
+  \note{Dedup is the one stage where the literature is unambiguous that it
+  helps. Then FineWeb found the limit of that claim, which is why this slide is
+  worth more than its share of time.
+
+  Spell out the mechanism of the surprise: duplication on the web is a weak
+  quality signal, because people copy things that are worth copying. Global
+  dedup discards that signal entirely.
+
+  Connect it forward: this is the first of three places today where the
+  intuitive move turns out to be wrong at scale.}
+\end{frame}
+
+\begin{frame}[shrink=7]{Stage 5a: quality filtering by hand}
+  Hand-written heuristics, inherited largely from C4 and Gopher. A document
+  survives if, roughly:
+  \vspace{0.5em}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \small
+      \begin{itemize}
+        \item 50--100\,000 words, mean word length 3--10 characters
+        \item fewer than 30\% of lines ending in an ellipsis
+        \item at least 80\% of words containing an alphabetic character
+        \item a sentence-ending punctuation mark on most lines
+        \item symbol-to-word ratio below $0.1$
+        \item no match against a list of blocked terms
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{What these rules really are}
+        \small
+        A set of cheap proxies for ``written by a person, for a reader''.
+        \vspace{0.4em}
+        They are also \textbf{English-shaped}. A mean word length of 3--10
+        characters is wrong for Finnish or German compounding, and
+        sentence-final punctuation is wrong for Thai. Blocked-term lists remove
+        sex education along with pornography, and they take out a lot of text
+        written by and about minority groups.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \vspace{0.5em}
+  \small
+  The rules are cheap and you can audit them. They also put a ceiling on
+  quality, because a rule you can write down is a rule a spammer can satisfy.
+  \source{Raffel et al., \textit{C4}, 2020; Rae et al., \textit{Gopher}, 2021;
+          Dodge et al., \textit{Documenting the English C4}, 2021.}
+  \note{Read two or three of the rules aloud in a deadpan voice. Putting
+  ``trillion-parameter frontier model'' next to ``fewer than thirty per cent of
+  lines ending in an ellipsis'' is genuinely funny, and it makes the point
+  stick.
+
+  The fairness objection in the right-hand block is documented, not
+  speculative: Dodge and colleagues audited C4's blocklist and found it removed
+  a large amount of non-offensive content, with a measurable skew.
+
+  The last line sets up the next slide.}
+\end{frame}
+
+\begin{frame}{Stage 5b: quality filtering by classifier}
+  Replace the rules with a model. \key{FineWeb-Edu} is the canonical worked
+  example.
+  \vspace{0.5em}
+  \begin{columns}[T]
+    \begin{column}{0.56\textwidth}
+      \begin{enumerate}
+        \item Ask a large instruct model to rate 460k FineWeb documents 0--5
+          for \emph{educational value}
+        \item Train a small, cheap classifier on those labels, on top of an
+          off-the-shelf embedding model
+        \item Run it over all 15T tokens of FineWeb
+        \item Keep the documents scoring 3 or above
+      \end{enumerate}
+      \vspace{0.5em}
+      Result: \textbf{1.3T tokens} out of 15T, so under a tenth survives. At
+      the same token budget, models trained on the survivors are substantially
+      better on knowledge-and-reasoning benchmarks such as MMLU and ARC.
+    \end{column}
+    \begin{column}{0.44\textwidth}
+      \begin{block}{The cost of the trick}
+        \small
+        You have encoded one model's taste into your corpus.
+        \vspace{0.4em}
+        ``Educational value'' favours textbooks, tutorials and encyclopaedic
+        prose, and it disfavours dialogue, fiction, argument and informal
+        registers.
+        \vspace{0.4em}
+        If you want a model that can write, that is the wrong thing to filter
+        on, and you will discover it after the run.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \source{Lozhkov et al., \textit{FineWeb-Edu}, 2024; Penedo et al.,
+          \textit{The FineWeb Datasets}, 2024.}
+  \note{The numbers to say: 460 thousand annotations from a big model, one
+  small classifier, fifteen trillion tokens in, one point three trillion out.
+  A ninety-one per cent discard rate, and the result is better.
+
+  Then say the honest part. FineWeb-Edu is a benchmark-shaped dataset, and the
+  FineWeb team say so themselves. Filter for a benchmark and you end up with a
+  corpus shaped like that benchmark. If your downstream use is conversational
+  or creative, the educational filter is actively the wrong objective.
+
+  This is also the best available answer to ``can I just use an LLM to clean my
+  data?'': yes, as an annotator for a cheap classifier, and no, not as the
+  filter itself. Nobody can afford to run a 70B model over fifteen trillion
+  tokens.}
+\end{frame}
+
+\begin{frame}[shrink=9]{How to compare data pipelines}
+  \begin{gotcha}[Inspection is necessary, but not sufficient]
+    Samples and corpus statistics can reveal obvious problems. To determine
+    which pipeline produces better training data, train comparable small models
+    and evaluate them on the same tasks.
+  \end{gotcha}
+  \vspace{0.5em}
+  \begin{columns}[T]
+    \begin{column}{0.54\textwidth}
+      \textbf{The FineWeb ablation protocol}
+      \begin{itemize}
+        \item fix the architecture, tokenizer, hyperparameters and token budget
+        \item train a 1.8B-parameter model on 28B tokens from each candidate
+          dataset
+        \item evaluate on a fixed suite of benchmarks chosen in advance for
+          low variance and a signal above chance at that scale
+        \item change \textbf{one} pipeline decision at a time
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{block}{Why this is the methodological lesson}
+        \small
+        It turns data engineering into something you can run experiments on.
+        \vspace{0.4em}
+        It is also expensive: every filter you want to justify costs a training
+        run, which is why the published ablation studies come from the handful
+        of teams willing to spend compute on questions rather than on models.
+        \vspace{0.4em}
+        The same protocol is what Lab 1 Part C asks you to run, in miniature.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \source{Penedo et al., \textit{The FineWeb Datasets}, 2024.}
+  \note{This slide transfers further than anything else in the lecture, and it
+  is exam material. Say the gotcha, pause, and then ask the room how they would
+  decide between two candidate corpora. Someone will say ``look at them'',
+  which is what almost everyone says and it is wrong.
+
+  The benchmark-selection detail is worth ten seconds: you cannot use MMLU in a
+  1.8B ablation because it is at chance, so you choose a suite that has signal
+  at your ablation scale. Choosing the wrong suite makes the whole protocol
+  blind.
+
+  Clock check: should be around 16:40 here.}
+\end{frame}
+
+% Useful background, omitted from the 90-minute projected deck.
+\iffalse
+\begin{frame}{Stage 6: PII removal}
+  \begin{columns}[T]
+    \begin{column}{0.54\textwidth}
+      Regular expressions and named-entity models over email addresses, phone
+      numbers, IP addresses, and sometimes postal addresses and identity
+      numbers. Matches are replaced with placeholders rather than deleted, so
+      the surrounding text stays grammatical.
+      \vspace{0.6em}
+
+      There are two separate motivations here, and they often get conflated:
+      \begin{itemize}
+        \item \key{legal} --- personal data requires a lawful basis, data
+          minimisation and appropriate risk controls under GDPR
+        \item \key{behavioural} --- a model that has memorised contact details
+          will emit them, and that is a product failure before it is a legal one
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{block}{Failure mode of this stage}
+        \small
+        These tools miss a great deal, and they also flag a great deal they
+        should not.
+        \vspace{0.4em}
+        Regexes miss anything obfuscated and destroy legitimate text: version
+        numbers that look like IP addresses, Finnish place names that a NER
+        model reads as person names.
+        \vspace{0.4em}
+        And stripping PII is not the same as privacy. A model can reconstruct
+        an identity from context long after every email address has gone.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \source{Soldaini et al., \textit{Dolma}, 2024; FineWeb-PII, 2024.}
+  \note{Keep this short, but do not skip it. It is the stage with the clearest
+  legal exposure for anyone in this room who ends up building a corpus in
+  Europe.
+
+  The line to land is the last one. PII scrubbing mitigates the problem and
+  does not solve it, so anyone who claims their model cannot leak personal data
+  because they ran a regex is overclaiming.}
+\end{frame}
+\fi
+
+\begin{frame}[shrink=9]{Stage 7: decontamination}
+  Remove from the training corpus any text that overlaps the \emph{test sets}
+  you intend to report.
+  \vspace{0.6em}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \textbf{How}: $n$-gram overlap against every benchmark's test split.
+      GPT-3 used 13-grams; later work uses 8- to 13-grams or normalised
+      substring matching. Flagged documents are dropped, or the matching
+      passage is excised.
+      \vspace{0.5em}
+
+      \textbf{Why it is hard}
+      \begin{itemize}
+        \item you must know your benchmarks before you train
+        \item paraphrases and translations are invisible to $n$-gram matching
+        \item a later benchmark can still overlap with earlier source material,
+          paraphrases, translations or later training stages
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Why you should care in week 4}
+        \small
+        Contamination can inflate a benchmark score without an obvious warning
+        in the output.
+        \vspace{0.4em}
+        It is one possible explanation for an unexpectedly large result, and
+        one reason Jussi's evaluation lecture emphasises held-out data you
+        control.
+        \vspace{0.4em}
+        In your own project: your held-out set must never have been used during
+        development, for exactly the same reason at a smaller scale.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \source{Brown et al.\ 2020; Soldaini et al., \textit{Dolma}, 2024;
+          Raschka, \textit{Understanding the 4 Main Approaches to LLM Evaluation}, 2025.}
+  \note{Decontamination is the bridge to week 4 and to their own experimental
+  hygiene, so make that link explicit rather than treating it as a data-cleaning
+  footnote.
+
+  A benchmark newer than the main crawl reduces one contamination route, but
+  it is not a guarantee: source material, later training stages and semantic
+  overlap still matter.}
+\end{frame}
+
+\begin{frame}[shrink=12]{Stage 8: the mixture}
+  The last decision is how much of each source goes in, and how many times each
+  one is seen. It has more effect on the model than anything before it.
+
+  \vspace{0.4em}
+  \centering
+  \begin{tabular}{@{}L{2.8cm} L{2.4cm} L{5.6cm}@{}}
+    \toprule
+    \textbf{Source} & \textbf{Typical share} & \textbf{What it contributes}\\
+    \midrule
+    filtered web & 60--85\% & breadth, world knowledge, register variety\\[0.25em]
+    code & 5--20\% & reasoning in general, not only coding\\[0.25em]
+    maths & 2--10\% & arithmetic and multi-step derivation\\[0.25em]
+    books, papers & 2--10\% & long-range coherence, formal register\\[0.25em]
+    curated reference & 1--5\% & tiny, and upsampled aggressively\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.5em}
+  \raggedright
+  \small
+  \key{Upsampling} means sampling a scarce source more often. One study found
+  useful gains over several passes and diminishing returns with heavy
+  repetition; the useful limit depends on the corpus and model.
+  \source{Muennighoff et al., \textit{Scaling Data-Constrained Language Models}, 2023;
+          Aryabumi et al., \textit{To Code or Not To Code?}, 2024.}
+  \note{Two numbers to land. First, code in the pretraining mixture improves
+  general reasoning as well as code generation. Cohere ran that ablation
+  properly and it is one of the more surprising robust findings in the field.
+  Nobody fully agrees on why; the leading guess is that code supplies long,
+  structured, verifiable dependency chains.
+
+  The curated-reference row is mostly Wikipedia: a few gigabytes of text that
+  gets seen many times over a trillion-token run.
+
+  Second, the four-epoch rule. Anyone working in a data-constrained language
+  will use that number constantly, and we come back to it on the Finnish slide
+  in two minutes.
+
+  Shares are indicative and vary a lot between labs. Say that out loud so
+  nobody quotes the table as gospel.}
+\end{frame}
+
+\begin{frame}{A smaller language has a smaller data budget}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \begin{itemize}
+        \item English is roughly \textbf{45\%} of CommonCrawl documents;
+          Finnish roughly \textbf{0.2\%}
+        \item after filtering, usable Finnish web text is on the order of
+          \textbf{tens of billions} of tokens
+      \end{itemize}
+      \vspace{0.4em}
+
+      A compute-optimal 7B model uses about 140B tokens, and many recent
+      recipes use substantially more. Finnish data alone is therefore not
+      enough for this kind of general-purpose model.
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{The consequence}
+        \small
+        A practical approach is a \textbf{multilingual} model in which Finnish
+        is upsampled.
+        \vspace{0.4em}
+        This supplies enough varied training text while giving Finnish a larger
+        share than its raw web frequency.
+        \vspace{0.4em}
+        It can also transfer useful patterns learned from English and code to
+        Finnish contexts.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \source{CommonCrawl language statistics; TurkuNLP Finnish web corpora;
+          Luukkonen et al., \textit{Poro 34B}, 2024.}
+  \note{This is where the lecture becomes local. Most of the room either speaks
+  Finnish or works on a language with a similar data budget, so make the
+  arithmetic concrete and let it land.
+
+  The number that does the work is the ratio: two hundred to one against
+  English before filtering, and the gap widens after filtering because the
+  quality heuristics are English-shaped.
+
+  The upside at the bottom is easy to miss: a model can carry reasoning ability
+  from English into Finnish even though it cannot carry Finnish facts it never
+  saw. That is the entire basis of the Poro design on the next slide.}
+\end{frame}
+
+\begin{frame}{Ways to increase training data for a smaller language}
+  \small
+  \centering
+  \begin{tabular}{@{}L{2.7cm} L{4.2cm} L{4.2cm}@{}}
+    \toprule
+    \textbf{Approach} & \textbf{What it provides} & \textbf{Main limitation}\\
+    \midrule
+    multilingual mixture & more total data and cross-lingual transfer &
+      less compute spent directly on the target language\\[0.35em]
+    repeat scarce data & greater weight for existing target-language text &
+      diminishing returns and more memorisation\\[0.35em]
+    machine translation & large volumes from high-resource languages &
+      translation patterns and MT errors\\[0.35em]
+    synthetic text & controllable topics and formats &
+      generator bias, errors and licence constraints\\[0.35em]
+    parallel text & explicit links between languages &
+      limited volume and domain coverage\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.6em}
+  \raggedright
+  These approaches are usually combined. Poro, for example, mixed Finnish with
+  English and code, repeated Finnish data, and included aligned
+  English--Finnish text.
+  \source{Muennighoff et al.\ 2023; Luukkonen et al., \textit{Poro 34B}, 2024.}
+  \note{Walk the table quickly and stress that these are complementary rather
+  than mutually exclusive choices. Parallel data is particularly relevant to
+  the Poro case study.
+
+  Translationese deserves a sentence: translated text has systematically
+  different distributional properties from natively written text, and a model
+  trained heavily on it writes like a translation. Several national-language
+  model projects have run into this.}
+\end{frame}
+
+\begin{frame}[shrink=8]{Case study: Poro and Viking on LUMI}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \textbf{Poro 34B} (2024) --- Silo AI with TurkuNLP and HPLT, trained on
+      LUMI on roughly \textbf{1T tokens}:
+      \begin{itemize}\small
+        \item English (SlimPajama), the majority of the mixture
+        \item \emph{all} the usable Finnish there was --- on the order of 30B
+          tokens, repeated several epochs
+        \item a large code share (StarCoder)
+        \item explicit \key{English--Finnish translation pairs}
+      \end{itemize}
+      \vspace{0.4em}
+      \textbf{Viking 7B / 13B / 33B} --- the follow-up: about 2T tokens
+      across Finnish, English, Swedish, Danish, Norwegian, Icelandic and code.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{What it bought}
+        \small
+        Finnish performance far beyond anything trainable on Finnish alone,
+        and English did not suffer for it. That is the cross-lingual transfer
+        argument, demonstrated at scale on a national supercomputer.
+      \end{block}
+      \begin{block}{What I would do differently}
+        \small
+        The architecture was frozen roughly nine months before release, and the
+        field moved. A token budget that looked ambitious at kick-off was
+        unremarkable at launch. And a large share of the engineering effort
+        went into the software stack rather than the model.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \source{Luukkonen et al., \textit{Poro 34B and the Blessing of Multilinguality}, 2024;
+          Viking model cards, Silo AI / TurkuNLP / HPLT, 2024.
+          Mixture shares approximate.}
+  \note{This is first-hand, so tell it as a story rather than reading the slide.
+  The decision that is worth the most to them: we did not try to build a Finnish
+  model, we built an English-and-code model that also had Finnish in it, because
+  that was the only way the data budget closed.
+
+  Be honest about the retrospective. The nine-month architecture freeze is the
+  real lesson of large-scale training: the run usually finishes, and by the
+  time it does the field has moved.
+
+  If asked about compute: a few hundred LUMI GPUs for several weeks. Exact
+  figures are in the paper and I would rather they look them up than that I
+  misquote them.}
+\end{frame}
+
+\begin{frame}[shrink=11]{Licensing, and the open-data question}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \textbf{What is actually released}
+      \begin{itemize}
+        \item \key{weights only} --- almost everything called ``open'':
+          Llama, Qwen, Gemma, DeepSeek, Mistral
+        \item \key{weights + data + code + recipe} --- OLMo, and very little else
+        \item \key{data only} --- FineWeb, Dolma, HPLT, The Stack
+      \end{itemize}
+      \vspace{0.5em}
+      The legal status of training on copyrighted web text is unsettled and
+      differs between the EU and the US. The EU's text-and-data-mining exception
+      has an opt-out that publishers increasingly exercise.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Why this matters for research}
+        \small
+        If the data is secret, the experiment is not reproducible, and claims
+        about architecture cannot be separated from claims about data.
+        \vspace{0.4em}
+        That is the concrete reason I said on Tuesday that ``which architecture
+        is best'' is unanswerable from public evidence.
+      \end{block}
+      \vspace{0.3em}
+      \small
+      For your project: name the licence of every model and dataset you use, and
+      check that it permits academic use. This is in the rubric.
+    \end{column}
+  \end{columns}
+  \vfill
+  \begin{takeaway}
+    At the same scale, what separates two models is mostly what they were
+    trained on, and that is the part of a recipe least likely to be documented.
+  \end{takeaway}
+  \note{Close the section on the research-literacy point, which is the one that
+  connects back to Tuesday's honest closer about architecture.
+
+  The OLMo exception is worth naming every time it comes up. It is the only
+  family where you can actually run the controlled experiment, and that is why
+  it is over-represented in the citations on these slides relative to its
+  benchmark scores.
+
+  Clock check: should be around 16:47 here. If we are late, cut the licensing
+  discussion to thirty seconds. The scaling-law section cannot be compressed.}
+\end{frame}
+
+% =====================================================================
+\section{Scaling laws}
+% =====================================================================
+
+\begin{frame}{Loss is a power law in compute}
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[
+      width=10.2cm, height=4.4cm,
+      xmode=log, ymode=log,
+      xlabel={\scriptsize training compute $C$ (FLOPs)},
+      ylabel={\scriptsize loss},
+      xlabel style={font=\scriptsize}, ylabel style={font=\scriptsize},
+      tick label style={font=\scriptsize},
+      xmin=3e16, xmax=3e25, ymin=1.4, ymax=5.5,
+      axis lines=left, no markers,
+      ytick={1.5,2,3,4,5}, yticklabels={1.5,2,3,4,5},
+    ]
+      \addplot[UHBlue, thick] coordinates {
+        (1e17,4.60) (1e18,4.03) (1e19,3.52) (1e20,3.08) (1e21,2.70)
+        (1e22,2.36) (1e23,2.06) (1e24,1.81) (1e25,1.58)};
+      \addplot[only marks, mark=*, mark size=1.6pt, UHOrange] coordinates {
+        (1.2e17,4.55) (7.2e23,1.90) (3.3e24,1.73)};
+      \node[lbl, anchor=west, font=\tiny\color{UHGrey}] at (axis cs:1.6e17,4.0) {your Lab 1 run};
+      \node[lbl, anchor=east, font=\tiny\color{UHGrey}] at (axis cs:5.0e23,1.62) {Llama 3 8B};
+      \node[lbl, anchor=west, font=\tiny\color{UHGrey}] at (axis cs:4.0e24,1.95) {DeepSeek V3};
+    \end{axis}
+  \end{tikzpicture}
+
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \small
+      Kaplan et al.\ (2020): across seven orders of magnitude, test loss falls
+      approximately as a \key{power law} in parameters, data and compute within
+      the range they measured. On log--log axes this appears close to a
+      straight line.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \small
+      This is what made scaling an \emph{engineering} activity. You can fit the
+      line at small scale and predict the loss of a run you have not yet paid
+      for. Frontier labs now do exactly that before committing.
+    \end{column}
+  \end{columns}
+  \source{Kaplan et al., \textit{Scaling Laws for Neural Language Models}, 2020.
+          Curve is illustrative; the markers use $C = 6ND$ from the next slides.}
+  \note{Larger models were already known to help. The striking observation was
+  how closely the measured losses followed smooth trends across a wide compute
+  range.
+
+  The practical consequence is the one to emphasise. Scaling laws let teams
+  use smaller experiments to inform the budget and expected loss of a larger
+  run.
+
+  Flag that this curve is illustrative, since a real one is fitted from dozens
+  of runs. The three markers, though, are placed with the arithmetic we are
+  about to do.}
+\end{frame}
+
+\begin{frame}[shrink=5]{Chinchilla: how to split a fixed budget}
+  You have a fixed compute budget. Do you spend it on a \textbf{bigger model}
+  ($N$ parameters) or on \textbf{more text} ($D$ tokens)?
+  \vspace{0.3em}
+
+  Hoffmann et al.\ fitted the loss as a function of both, then asked which split
+  minimises it with the budget $C = 6ND$ held fixed. The answer:
+  \[
+    \frac{D}{N} \;\approx\; 20\ \text{tokens per parameter}
+  \]
+  \emph{In words:} in their experiments, model size and data size should grow
+  \key{together}. The value 20 is a useful historical reference, not a
+  universal constant.
+  \vspace{0.3em}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \small
+      \textbf{The demonstration.} Gopher: 280B parameters on 300B tokens.
+      Chinchilla: \textbf{70B} parameters on \textbf{1.4T} tokens. Same
+      training compute, but a smaller model trained on much more data.
+      Chinchilla reported lower loss and stronger results on many benchmarks.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \small
+      \textbf{How to use the result.} Treat the ratio as a starting point.
+      Architecture, data quality, optimiser and learning-rate schedule all
+      affect the fitted optimum, so current projects run their own small-scale
+      studies.
+    \end{column}
+  \end{columns}
+  \source{Hoffmann et al., \textit{Training Compute-Optimal Large Language Models}, 2022.}
+  \note{The room may have heard ``twenty tokens per parameter'' without knowing
+  where it comes from. It is the optimum fitted in this particular study, not
+  a general law.
+
+  The fitted form, for anyone who wants it:
+  $L(N,D) \approx E + A/N^{\alpha} + B/D^{\beta}$ with $\alpha \approx 0.34$ and
+  $\beta \approx 0.28$. $E$ is the irreducible entropy of the text, the second
+  term is the cost of a finite model, the third the cost of finite data.
+  Minimising this subject to $C = 6ND$ gives $N \propto C^{1/2}$ and
+  $D \propto C^{1/2}$, so both grow as the square root of compute, and the
+  ratio $D/N \approx 20$. The reason both exponents come out at one half is that
+  $\alpha$ and $\beta$ are nearly equal; had one been much larger, the optimum
+  would have been lopsided.
+
+  The Gopher comparison is the headline: the previous generation had been
+  spending its compute in the wrong place for years, and a model four times
+  smaller beat it on the same budget. Everything got cheaper to serve
+  overnight.
+
+  The research-literacy point is that scaling-law coefficients are empirical.
+  They depend on the models, data and training procedure used to fit them.}
+\end{frame}
+
+\begin{frame}{Where $6ND$ comes from}
+  A \key{FLOP} is one floating-point operation: a single multiply or a single
+  add. Using one weight on one token means one multiply and one add, so
+  \textbf{2 FLOPs per weight per token}.
+  \vspace{0.5em}
+  \begin{itemize}
+    \item \textbf{Forward pass.} Every token passes through every parameter
+      once. \hfill $2ND$
+      \vspace{0.4em}
+    \item \textbf{Backward pass.} Twice the work of the forward pass, because
+      each layer computes two gradients: one to pass further back down the
+      network, one to update its own weights. \hfill $4ND$
+  \end{itemize}
+  \vspace{0.5em}
+  \[ \boxed{\,C \;\approx\; 6 N D\,} \qquad
+     N = \text{parameters}, \quad D = \text{training tokens} \]
+  \emph{In words:} a training run costs about six operations per parameter per
+  token for the parameterised layers of a conventional dense transformer. The
+  next slide lists important costs this estimate omits.
+  \note{Do this on the board, step by step, and do not skip the factor of two
+  from multiply-plus-add. If you assert it, half the class loses the thread
+  there.
+
+  The shape argument, if you want it in full: multiplying a $B \times m$ block of
+  activations by an $m \times n$ weight matrix costs $2Bmn$ FLOPs, which is two
+  per input element per weight. Summed over all weights and all tokens that is
+  $2ND$ forward.
+
+  The backward pass is the step people forget: it is two matrix multiplies of
+  the same shape per layer, not one, because you need the gradient with respect
+  to the layer's \emph{input} in order to propagate, and the gradient with
+  respect to its \emph{weights} in order to update. So $2 \times 2ND = 4ND$, and
+  the total is $6ND$. Draw the chain rule for a single linear layer if anyone
+  looks unconvinced.
+
+  Then say the point of the whole slide: they own this number now, and can
+  rebuild it in thirty seconds, in an exam or in a meeting.}
+\end{frame}
+
+\begin{frame}{What $6ND$ leaves out}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \textbf{Attention's quadratic term.} Comparing every token with every
+      other token uses \emph{no parameters}, so $6ND$ cannot see it at all. At a
+      4k context window it adds about \textbf{10\%} on top. The work grows with
+      the square of the context length, so at 128k context it dominates the bill.
+      \vspace{0.5em}
+
+      \textbf{Embeddings.} Usually left out of the parameter count. For a 70B
+      model you can ignore them. For a 20M model with a 32k vocabulary they are
+      a large fraction of the whole thing.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Activation checkpointing}
+        \small
+        Save fewer intermediate activations and recompute them during the
+        backward pass. Full recomputation adds roughly one forward pass:
+        \[ C \approx 8ND \quad \text{rather than} \quad 6ND \]
+        Selective checkpointing adds less compute. The exact trade-off depends
+        on which operations are recomputed.
+      \end{block}
+      \vspace{0.3em}
+      \small
+      So $6ND$ is a \emph{lower bound on the useful work}. Measured wall-clock
+      FLOPs are always higher.
+    \end{column}
+  \end{columns}
+  \note{Teach them to say ``approximately'' out loud. The approximation is good
+  to maybe twenty per cent for a conventional model at ordinary context
+  lengths, and it breaks down badly at very long contexts, where attention is
+  most of the bill.
+
+  The size of the attention correction, if asked: relative to the linear layers
+  it is about $n / (6\,d_{\text{model}})$, where $n$ is the context length and
+  $d_{\text{model}}$ the model width. At $n = d_{\text{model}} = 4096$ that is
+  roughly $1/6$ of a factor, i.e.\ ten per cent-ish of total compute; at
+  $n = 128$k with the same width it is well over one.
+
+  Activation checkpointing is the first appearance of the compute-for-memory
+  trade that the whole of section four is about. Plant the eight-ND number now,
+  reuse it in fifteen minutes.}
+\end{frame}
+
+\begin{frame}[shrink=9]{Worked: your Lab 1 run}
+  Your model has \textbf{20 million} parameters and you train it on
+  \textbf{1 billion} tokens, at six operations each:
+  \[
+    C \;=\; 6ND \;=\; 6 \times (2\times10^{7}) \times (1\times10^{9})
+      \;=\; 1.2\times10^{17}\ \flops
+  \]
+  \vspace{0.2em}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      One GH200 does about $10^{15}$ of those operations per second at peak,
+      and a good run turns perhaps 40\% of peak into useful work. At
+      $4\times10^{14}$ per second you get through the whole budget in roughly
+      \textbf{300 seconds}.
+      \vspace{0.3em}
+
+      That is five minutes of pure arithmetic.
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{Measure this on Roihu}
+        \small
+        Because a 20M-parameter model \textbf{cannot keep an H100 busy}. The
+        matmuls are too small, the data loader and the Python overhead
+        dominate, and your real MFU will be a few per cent.
+        \vspace{0.4em}
+        Twenty minutes is a planning estimate, not a guarantee. Record the
+        actual throughput and wall time; their gap from the arithmetic estimate
+        is itself a useful result.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \vspace{0.5em}
+  \small
+  At cloud rates of roughly two euro per GPU-hour, your entire pretraining run
+  costs well under one euro.
+  \source{GH200 peak bf16 throughput from NVIDIA datasheets; 40\% MFU is a
+          typical figure for a well-tuned large run, not for a tiny one.}
+  \note{This is the slide that makes 6ND feel like a tool rather than a fact.
+  Do the arithmetic live; it is one multiplication.
+
+  The five-versus-twenty-minutes point is the pedagogically valuable part and
+  it is a genuine result from the dry run. Small models are bad at using big
+  GPUs. Tell them to look at their own MFU in the lab and to not be surprised
+  when it is two per cent.
+
+  This also quietly explains why nobody trains tiny models on H100s in
+  practice, and why the hardware market is shaped the way it is.}
+\end{frame}
+
+% The Lab 1 calculation is enough for the main lecture; frontier-cost detail is
+% retained here for reference.
+\iffalse
+\begin{frame}[shrink=4]{Worked: what a real run costs}
+  \centering
+  \begin{tabular}{@{}L{2.5cm} r r r L{3.4cm}@{}}
+    \toprule
+    \textbf{Run} & \textbf{Params} & \textbf{Tokens} & \textbf{Compute (FLOPs)} & \textbf{Reported cost}\\
+    \midrule
+    Lab 1 Part B & 20M & 1B & $1.2\times10^{17}$ & under one euro\\[0.3em]
+    Llama 3 8B & 8B & 15T & $7.2\times10^{23}$ & 39M GPU-h for the family\\[0.3em]
+    Llama 3 405B & 405B & 15.6T & $3.8\times10^{25}$ & 30.8M H100-h, about \$62M\\[0.3em]
+    DeepSeek V3 & 37B active & 14.8T & $3.3\times10^{24}$ & 2.79M H800-h, about \$5.6M\\
+    \bottomrule
+  \end{tabular}
+  \vspace{0.5em}
+  \begin{block}{What the \$5.6M figure does not include}
+    It covers the \textbf{final run only}, and leaves out salaries, the data
+    pipeline, every abandoned experiment, all post-training, and the cost of
+    owning the cluster.
+  \end{block}
+  \source{DeepSeek-AI, \textit{DeepSeek-V3 Technical Report}, Dec 2024;
+          Grattafiori et al., \textit{The Llama 3 Herd of Models}, 2024.
+          Dollar figures use the papers' own assumed rental rate of \$2 per GPU-hour.}
+  \note{The DeepSeek number was reported in the press as ``a frontier model for
+  five million dollars'' and that framing is misleading in exactly the way the
+  box describes. DeepSeek themselves say in the paper that the figure covers
+  the official training run only.
+
+  Two more things the figure leaves out, which did not fit in the box: the
+  ablation runs that chose the recipe, and the capital cost of owning a cluster
+  rather than renting one. A credible rule of thumb is that the final run is a
+  minority of what a frontier model really costs.
+
+  Make them feel the ratio: their run is about one twenty-seven-millionth of
+  DeepSeek V3. That is the span this field operates over, and it is why the
+  same equation has to work at both ends.
+
+  Note the asterisk on DeepSeek: 37B is the \emph{active} parameter count,
+  because 6ND counts the parameters each token actually touches. A good
+  student will ask; have the answer ready.}
+\end{frame}
+\fi
+
+\begin{frame}[shrink=12]{Why deployed models are often trained past the Chinchilla optimum}
+  \centering
+  \begin{tabular}{@{}L{3.2cm} r r r@{}}
+    \toprule
+    \textbf{Model} & \textbf{Params} & \textbf{Tokens} & \textbf{tokens / param}\\
+    \midrule
+    Chinchilla (2022) & 70B & 1.4T & 20\\
+    Llama 3 8B (2024) & 8B & 15T & about 1\,900\\
+    DeepSeek V3 (2024) & 37B active & 14.8T & about 400\\
+    Your Lab 1 run & 20M & 1B & 50\\
+    \bottomrule
+  \end{tabular}
+  \vspace{0.8em}
+  \begin{gotcha}[Chinchilla-optimal is the wrong target for a model you will serve]
+    Chinchilla minimises \textbf{training} compute for a given loss. If you are
+    going to run this model billions of times, the quantity to minimise is
+    \textbf{inference} compute, roughly two operations per parameter per
+    generated token, which does not depend on how long you trained at all.
+    \vspace{0.3em}
+    So you overtrain deliberately: spend more now, to get the same loss from a
+    permanently smaller model.
+  \end{gotcha}
+  \vspace{0.4em}
+  \small
+  Llama 3 8B used roughly \textbf{90 times} the compute that Chinchilla would
+  have prescribed for an 8B model, and Meta said explicitly that the loss was
+  still improving when they stopped.
+  \source{Hoffmann et al.\ 2022; Grattafiori et al.\ 2024.}
+  \note{This is the third gotcha and it is the one that most often appears in
+  exams as ``is Chinchilla wrong?''. The answer is no. Chinchilla answers the
+  question it asked, which is not the question a company shipping a product is
+  asking.
+
+  The asymmetry that decides it: you pay the training cost once and it scales
+  with D, while you pay the inference cost on every request and it does not
+  depend on D at all. Say that twice. It is the hinge of the argument and the
+  opening claim of the week 3 lecture.
+
+  The ninety-times figure is worth quoting precisely: Chinchilla-optimal for 8B
+  is about 160 billion tokens, and Llama 3 used fifteen trillion.}
+\end{frame}
+
+% Detailed emergence discussion belongs with evaluation in week 4.
+\iffalse
+\begin{frame}{What scaling laws do not predict}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      A scaling law predicts \key{loss}, and nothing beyond it.
+      \vspace{0.5em}
+
+      Nobody can derive from the law how a smooth drop in cross-entropy turns
+      into the ability to do multi-step arithmetic, follow a format or use a
+      tool. We observe that afterwards.
+      \vspace{0.5em}
+
+      \textbf{Emergence.} Some benchmarks sit near chance up to a certain scale
+      and then jump sharply. That is the ``emergent abilities'' claim.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{The deflationary counterpoint}
+        \small
+        Much apparent emergence is a \textbf{metric artefact}. Exact-match and
+        multiple-choice accuracy are discontinuous: a model that is steadily
+        getting better at a five-step problem scores zero until the last step
+        flips.
+        \vspace{0.4em}
+        Score the same runs with a continuous metric, such as token edit
+        distance or the log-likelihood of the correct answer, and the sharp
+        jump often turns into a smooth curve.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \vspace{0.4em}
+  \small
+  This is not settled. The honest position: discontinuous \emph{metrics} explain
+  a lot of claimed emergence, and they do not obviously explain all of it.
+  \source{Wei et al., \textit{Emergent Abilities of Large Language Models}, 2022;
+          Schaeffer et al., \textit{Are Emergent Abilities a Mirage?}, 2023.}
+  \note{Present both sides and do not resolve it, because it is not resolved.
+  The Schaeffer argument is clean and largely correct about the examples it
+  examines, and it does not license the claim that nothing interesting ever
+  happens discontinuously.
+
+  The transferable skill here is the one about metrics: before you believe a
+  phase transition in a plot, check whether the metric is continuous. That
+  habit is worth more than either position in the debate, and it comes back in
+  week 4.}
+\end{frame}
+\fi
+
+\begin{frame}{Loss is useful, but it is not the final goal}
+  \begin{columns}[T]
+    \begin{column}{0.54\textwidth}
+      Scaling laws predict validation loss. Product and research decisions
+      usually depend on something else: task accuracy, reliability, latency,
+      memory use or cost per request.
+      \vspace{0.5em}
+
+      Two models with similar loss can differ because of their data mixture,
+      tokenizer, context length and post-training. A small loss improvement may
+      also be too expensive to justify at inference time.
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{block}{How scaling laws are used}
+        \small
+        Use small runs to forecast whether a larger pretraining run is healthy
+        and what loss it may reach.
+        \vspace{0.4em}
+        Then evaluate the resulting model on the tasks and constraints that
+        matter for its intended use.
+        \vspace{0.4em}
+        Loss is a training diagnostic and forecasting target; it does not
+        replace downstream evaluation.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \vfill
+  \begin{takeaway}
+    $C \approx 6ND$ estimates what a run costs. It does not tell us whether the
+    resulting model is useful.
+  \end{takeaway}
+  \note{This prevents a common overinterpretation. Scaling laws are useful for
+  planning training, but the dependent variable is usually validation loss.
+  Task usefulness must be measured separately.
+
+  Connect forward to week 4: downstream evaluation is where the choice of
+  metric, held-out data and uncertainty becomes central.}
+\end{frame}
+
+% =====================================================================
+\section{Training at scale}
+% =====================================================================
+
+\begin{frame}{Why training uses much more memory than inference}
+  \centering
+  \begin{tabular}{@{}L{4.2cm} C{2.6cm} C{2.6cm}@{}}
+    \toprule
+    \textbf{What you must hold} & \textbf{Inference} & \textbf{Training}\\
+    \midrule
+    parameters, bf16 & 2 bytes & 2 bytes\\
+    gradients, bf16 & --- & 2 bytes\\
+    master parameters, fp32 & --- & 4 bytes\\
+    Adam moments $m$ and $v$, fp32 & --- & 8 bytes\\
+    \midrule
+    \textbf{per parameter} & \textbf{2 bytes} & \textbf{16 bytes}\\
+    \bottomrule
+  \end{tabular}
+  \vspace{0.4em}
+
+  \raggedright
+  Training also stores \key{activations}, which depend on batch size, sequence
+  length and model depth.
+  \vspace{0.25em}
+
+  \key{Useful rule of thumb: 16 bytes per parameter} for this mixed-precision
+  AdamW setup. Exact requirements vary, but fitting for inference does not mean
+  fitting for training.
+  \source{Standard mixed-precision AdamW accounting; cf.\ Rajbhandari et al.,
+          \textit{ZeRO}, 2020.}
+  \note{Make them write down sixteen. It is the companion number to 6ND and
+  between them they cover most back-of-envelope questions in this field.
+
+  The fp32 master copy surprises people. The reason is that a bf16 parameter
+  has about three significant decimal digits, so adding a small update to a
+  large weight silently does nothing. You keep the authoritative copy in fp32
+  and cast down for the matmuls.
+
+  The last line is the sentence to repeat: the eight-times gap between serving
+  and training is why LoRA exists, and that is next week.}
+\end{frame}
+
+\begin{frame}[shrink=3]{Memory examples: 7B and 20M parameters}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \begin{block}{A 7B model, full fine-tune or pretrain}
+        \[ 7\times10^{9} \times 16\ \text{bytes} \approx 112\ \text{GB} \]
+        \vspace{-0.6em}
+        \begin{itemize}\small
+          \item one GH200 has \textbf{96\,GiB}, about 103\,GB
+          \item so the \emph{optimiser state alone} does not fit, before a
+            single activation is stored
+          \item you can serve this model on half a card, and training it needs
+            rather more than one
+        \end{itemize}
+      \end{block}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{Your Lab 1 model}
+        \[ 2\times10^{7} \times 16\ \text{bytes} \approx 320\ \text{MB} \]
+        \vspace{-0.6em}
+        \begin{itemize}\small
+          \item that is \textbf{0.3\%} of the card
+          \item you can use an enormous batch, and you should
+          \item your bottleneck will be the data loader and kernel launch
+            overhead, not memory
+        \end{itemize}
+      \end{block}
+    \end{column}
+  \end{columns}
+  \vspace{0.6em}
+  \centering
+  The entire rest of this section exists because of the left-hand box.
+  \vfill
+  \small
+  Three honest escape routes from the left-hand box: train something smaller;
+  shard the state across many GPUs; or do not train all the parameters. We do
+  the second one today and the third one next week.
+  \note{The contrast is the pedagogical point, so put both boxes up at once and
+  let them sit for a moment.
+
+  Students consistently underestimate how much harder training is than
+  inference, because every tutorial they have read loads a model for inference
+  and it just works. One hundred and twelve gigabytes against ninety-six is the
+  cleanest way to make that concrete on hardware they will actually touch.
+
+  The three escape routes are the roadmap for the rest of the section and for
+  week 2. Say them and then start on sharding.}
+\end{frame}
+
+\begin{frame}{Activations, and buying memory with compute}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      The backward pass needs the intermediate tensors the forward pass
+      produced, the \key{activations}. Stored naively, the total is about
+      \[
+        \text{batch} \times \text{sequence length} \times \text{model width}
+          \times \text{layers}
+      \]
+      \emph{In words:} one number stored for every slot, in every layer, for
+      every token in the batch.
+      \vspace{0.4em}
+
+      Activation memory grows with batch size, sequence length, model width and
+      depth. It becomes especially important when the context length increases.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Activation checkpointing}
+        \small
+        Store activations only at layer boundaries. Recompute the rest during
+        the backward pass.
+        \vspace{0.4em}
+        \textbf{Memory}: save selected layer boundaries rather than every
+        intermediate tensor.\\[0.3em]
+        \textbf{Compute}: recompute the missing intermediates during backward.
+        Full recomputation adds roughly one forward pass; selective methods add
+        less.
+        \vspace{0.4em}
+        Selective variants recompute only what is cheap to recompute and
+        expensive to store, which usually means attention rather than the
+        feed-forward block.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \source{Chen et al., \textit{Training Deep Nets with Sublinear Memory Cost}, 2016;
+          Korthikanti et al., \textit{Reducing Activation Recomputation}, 2022.}
+  \note{The thing worth insisting on: activations are the one memory term that
+  does not care how big your model is. A 1B model at 128k context can be harder
+  to train than a 7B model at 2k.
+
+  The constant in the activation formula depends on how aggressively the
+  framework fuses kernels, and in practice it lands somewhere between about 10
+  and 30 bytes per slot per layer. The classic Chen et al.\ result is sharper than
+  ``checkpoint every block'': with the optimal placement, memory drops from
+  order $L$ to order $\sqrt{L}$ in the number of layers, for the same single
+  extra forward pass.
+
+  Checkpointing is the archetypal systems trade in this field: spend compute,
+  which you can buy linearly, to save memory, which you cannot. That pattern
+  recurs constantly, including in the KV-cache tricks from Tuesday.}
+\end{frame}
+
+\begin{frame}[shrink=9]{Four ways to split a training run}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \centering
+      \textbf{\small Data parallel}\\[0.3em]
+      \begin{tikzpicture}[
+        gpu/.style={draw=UHBlue, fill=UHBlue!18, minimum width=8mm,
+                    minimum height=8mm, font=\tiny, align=center, inner sep=1pt},
+        shard/.style={draw=UHGrey!60, fill=UHLight, minimum width=8mm,
+                    minimum height=4mm, font=\tiny, inner sep=1pt}]
+        \foreach \i/\x in {1/0, 2/1.1, 3/2.2, 4/3.3}{
+          \node[gpu] at (\x,0) {whole\\model};
+          \node[shard] at (\x,-0.78) {data \i};
+        }
+        \draw[flow] (-0.45,0.62) -- (3.75,0.62);
+        \node[lbl, font=\tiny\color{UHGrey}] at (1.65,0.88) {all-reduce gradients each step};
+      \end{tikzpicture}
+      \vspace{1.0em}
+
+      \textbf{\small Tensor parallel}\\[0.3em]
+      \begin{tikzpicture}[
+        gpu/.style={draw=UHOrange, fill=UHOrange!15, minimum width=8mm,
+                    minimum height=8mm, font=\tiny, align=center, inner sep=1pt}]
+        \foreach \i/\x in {1/0, 2/1.1, 3/2.2, 4/3.3}{
+          \node[gpu] at (\x,0) {$\tfrac14$ of\\each $W$};
+        }
+        \draw[flowhi] (-0.45,0.62) -- (3.75,0.62);
+        \node[lbl, font=\tiny\color{UHGrey}] at (1.65,0.88) {all-reduce \emph{inside} every layer};
+        \node[lbl, font=\tiny\color{UHGrey}] at (1.65,-0.72) {one batch, one layer, four GPUs};
+      \end{tikzpicture}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \centering
+      \textbf{\small Pipeline parallel}\\[0.3em]
+      \begin{tikzpicture}[
+        gpu/.style={draw=UHBlue, fill=UHBlue!18, minimum width=9mm,
+                    minimum height=8mm, font=\tiny, align=center, inner sep=1pt}]
+        \node[gpu] (p1) at (0,0) {L\,1--8};
+        \node[gpu] (p2) at (1.25,0) {L\,9--16};
+        \node[gpu] (p3) at (2.5,0) {L\,17--24};
+        \node[gpu] (p4) at (3.75,0) {L\,25--32};
+        \draw[flow] (p1) -- (p2); \draw[flow] (p2) -- (p3); \draw[flow] (p3) -- (p4);
+        \node[lbl, font=\tiny\color{UHGrey}] at (1.9,-0.72) {activations forward, gradients back};
+      \end{tikzpicture}
+      \vspace{1.0em}
+
+      \textbf{\small Sequence / context parallel}\\[0.3em]
+      \begin{tikzpicture}[
+        seg/.style={draw=UHGreen, fill=UHGreen!12, minimum width=11mm,
+                    minimum height=8mm, font=\tiny, align=center, inner sep=1pt}]
+        \node[seg] at (0,0) {tok\\1--32k};
+        \node[seg] at (1.25,0) {tok\\32--64k};
+        \node[seg] at (2.5,0) {tok\\64--96k};
+        \node[seg] at (3.75,0) {tok\\96--128k};
+        \node[lbl, font=\tiny\color{UHGrey}] at (1.9,-0.78) {all-gather the keys and values};
+      \end{tikzpicture}
+    \end{column}
+  \end{columns}
+  \vspace{0.5em}
+  \raggedright
+  \small
+  Two words will keep coming back. An \key{all-reduce} adds one tensor up
+  across every GPU and hands the total back to all of them, and an
+  \key{all-gather} gives every GPU a copy of every other GPU's piece. You pay
+  for splitting in exactly that traffic. The four axes are \key{orthogonal},
+  and a large run uses three or four at once.
+  \note{Put the four up together before taking them one at a time, exactly as
+  with Tuesday's KV taxonomy. The organising question for each is the same:
+  \emph{what is replicated, what is split, and what has to be communicated.}
+
+  Define the collectives out loud the first time, because this audience has no
+  distributed-computing background: GPUs cannot read each other's memory, so
+  every exchange is an explicit collective operation over the network. All-reduce
+  = everybody contributes, everybody receives the sum. All-gather = everybody
+  contributes, everybody receives the concatenation.
+
+  Say the orthogonality point now and the composition point at the end of the
+  section, so they have somewhere to put each slide as it arrives.}
+\end{frame}
+
+\begin{frame}[shrink=12]{Data parallel, and ZeRO}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \textbf{Plain data parallel.} Every GPU holds the whole model and
+      processes a different slice of the batch; the gradients are then summed
+      across all GPUs before the step.
+      \begin{itemize}\small
+        \item trivially simple, almost perfectly scalable in compute
+        \item \alert{but every GPU still holds all 16 bytes per parameter}
+      \end{itemize}
+      \vspace{0.5em}
+
+      \textbf{ZeRO / FSDP.} To \key{shard} something is to give each GPU only
+      its own slice of it and fetch the rest over the network when needed. ZeRO
+      shards the two optimiser averages, then the gradients, then the weights
+      themselves, collecting each layer's weights only for the moment that
+      layer is in use.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \centering
+      \begin{tabular}{@{}L{2.3cm} L{2.1cm} C{1.35cm}@{}}
+        \toprule
+        \textbf{Stage} & \textbf{What is split} & \textbf{GB/GPU}\\
+        \midrule
+        none & nothing & 112\\
+        ZeRO-1 & averages & 38\\
+        ZeRO-2 & $+$ gradients & 26\\
+        ZeRO-3 / FSDP & $+$ weights & 14\\
+        \bottomrule
+      \end{tabular}
+
+      \vspace{0.6em}
+      \raggedright\small
+      A 7B model across \textbf{8} GPUs. Only the last row fits on one card,
+      and it pays for that by moving far more bytes over the network.
+    \end{column}
+  \end{columns}
+  \source{Rajbhandari et al., \textit{ZeRO}, 2020; PyTorch FSDP, 2023.}
+  \note{The key insight of ZeRO is embarrassingly simple and worth saying
+  plainly: in plain data parallelism every GPU holds an identical copy of state
+  it is not using, and that is pure waste. Sharding it changes nothing
+  mathematically.
+
+  The general formulas behind the table, with $N$ parameters over $P$ GPUs:
+  unsharded is $16N$; ZeRO-1 shards the fp32 master copy and the two moment
+  buffers, giving $4N + 12N/P$; ZeRO-2 also shards gradients, $2N + 14N/P$;
+  ZeRO-3 shards everything, $16N/P$. The table instantiates these at
+  $N = 7\times10^9$, $P = 8$.
+
+  Communication, if asked: plain data parallel is one all-reduce of $N$ values
+  per step. ZeRO-3 adds an all-gather of each layer's weights on the way forward
+  and again on the way back, so roughly 50\% more traffic.
+
+  FSDP is what they would actually use, and it is ZeRO-3 under a different
+  name. Mention that at their project scale, a 4B model with LoRA, none of this
+  is needed.
+
+  If someone asks why anyone still uses ZeRO-1: because communication is not
+  free and stage 1 gets most of the memory saving for almost no extra traffic.}
+\end{frame}
+
+% Detailed distributed-systems mechanisms are optional reference material.
+\iffalse
+\begin{frame}{Tensor parallel}
+  \begin{columns}[T]
+    \begin{column}{0.54\textwidth}
+      Split the \emph{weight matrices} themselves across GPUs, inside each
+      layer.
+      \vspace{0.4em}
+
+      In a feed-forward block, each GPU gets a slice of \emph{columns} of the
+      first weight matrix and the matching slice of \emph{rows} of the second.
+      Each then computes a partial output from its own slice, and one
+      \key{all-reduce}, which adds those partials up across GPUs, recovers the
+      true output. Attention splits the same way, a group of heads per GPU.
+      \vspace{0.5em}
+
+      \textbf{Cost}: two all-reduces per transformer block, in the critical path
+      of every forward and backward pass. The GPUs cannot proceed without each
+      other.
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{block}{When to use it}
+        \small
+        Only \textbf{within} a node, over NVLink. Tensor parallelism across a
+        slower interconnect is a reliable way to make a cluster slower than a
+        single machine.
+        \vspace{0.4em}
+        Typical configuration: tensor parallel degree 8 inside a node, then
+        pipeline or data parallel between nodes.
+        \vspace{0.4em}
+        It is also the main reason \texttt{num\_attention\_heads} is usually a
+        multiple of 8.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \source{Shoeybi et al., \textit{Megatron-LM}, 2019.}
+  \note{The column-then-row split is the one piece of actual maths in this
+  section and it is worth drawing on the board. The block computes
+  $Y = \mathrm{SiLU}(X W_1) W_2$. Write $W_1 = [W_1^{(1)} \mid W_1^{(2)}]$, a
+  split by columns, and $W_2$ split correspondingly by rows. Then GPU $k$ holds
+  $W_1^{(k)}$ and $W_2^{(k)}$ and computes
+  $\mathrm{SiLU}(X W_1^{(k)}) W_2^{(k)}$; the true $Y$ is the sum of those
+  partials, which is exactly one all-reduce.
+
+  Why that order: splitting the first matrix by columns means each GPU owns
+  whole output units, so the nonlinearity can be applied independently. Split
+  the other way and you need a communication step \emph{before} the activation
+  function, which doubles the number of collectives.
+
+  The practical rule is the sentence in the box: tensor parallelism stays inside
+  a node. They will meet this again in week 3 as a serving decision, where the
+  same rule applies for the same reason.}
+\end{frame}
+
+\begin{frame}[shrink=9]{Pipeline parallel, and the bubble}
+  \centering
+  \begin{tikzpicture}[cell/.style={tokcell, minimum size=4.6mm}]
+    \foreach \d in {1,...,4}{
+      \foreach \t in {1,...,14}{
+        \node[cell, fill=UHGrey!12] at (\t*0.52, -\d*0.55) {};
+      }
+      \node[lbl, font=\tiny\color{UHGrey}, anchor=east] at (0.3, -\d*0.55) {GPU \d};
+    }
+    \foreach \d in {1,...,4}{
+      \foreach \m in {1,...,4}{
+        \pgfmathtruncatemacro{\tf}{\m + \d - 1}
+        \node[cell, fill=UHBlue!35] at (\tf*0.52, -\d*0.55) {F\m};
+        \pgfmathtruncatemacro{\tb}{11 + \m - \d}
+        \node[cell, fill=UHOrange!35] at (\tb*0.52, -\d*0.55) {B\m};
+      }
+    }
+    \node[lbl, font=\tiny\color{UHGrey}] at (3.9, -2.75) {time $\longrightarrow$};
+  \end{tikzpicture}
+  \vspace{0.6em}
+
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \small
+      Four stages, four micro-batches. Each GPU is busy for 8 of the 14 time
+      slots; the grey cells are the \key{bubble}, idle hardware waiting for a
+      stage that is not ready yet.
+      \[
+        \text{idle fraction} = \frac{p-1}{m+p-1} = \frac{3}{7} \approx 43\%
+      \]
+      \emph{In words:} with $p$ stages and $m$ micro-batches, you lose the time
+      it takes to fill the pipe and drain it again.
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \small
+      \textbf{The fix is more micro-batches.} With 32 micro-batches over 4
+      stages the bubble falls to about 9\%; cleverer schedules shrink it further.
+      \vspace{0.4em}
+
+      \textbf{The attraction}: the only thing sent between GPUs is the
+      activations at stage boundaries, so pipeline parallelism survives a slow
+      network link.
+    \end{column}
+  \end{columns}
+  \source{Huang et al., \textit{GPipe}, 2019; Narayanan et al., \textit{PipeDream} / Megatron-LM, 2021.}
+  \note{Walk the diagram left to right with a finger. GPU 1 does all four
+  forward micro-batches, then has nothing to do until gradients come back from
+  the far end of the pipe.
+
+  The formula is worth memorising because it tells you the design rule
+  immediately: the bubble shrinks when micro-batches outnumber stages, so deep
+  pipelines need large batches. Interleaved and 1F1B schedules do better still
+  and also reduce peak activation memory, by starting a backward pass as soon as
+  one micro-batch is ready rather than waiting for all of them.
+
+  Then the contrast that organises the section: tensor parallel needs a fast
+  interconnect, pipeline parallel tolerates a slow one, and that is most of how
+  people choose between them.}
+\end{frame}
+
+\begin{frame}[shrink=13]{Sequence parallel, and 3D parallelism}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{Sequence / context parallel.} Split the \emph{tokens} of one
+      sequence across GPUs. Each device owns a contiguous chunk and its
+      activations, which is the only way to train at 128k context without the
+      activation memory exploding.
+      \vspace{0.4em}
+
+      Attention is the hard part, because every token must still be able to look
+      at every earlier token. Ring Attention passes blocks of keys and values
+      around the ring of GPUs so that the communication overlaps with the
+      computation and costs almost nothing.
+      \vspace{0.5em}
+
+      \textbf{Sequence-parallel norms} are the cheap cousin: the norm layers can
+      be split along the sequence too, removing duplicated activation memory for
+      free.
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{How a real run composes them}
+        \small
+        A typical frontier configuration:
+        \vspace{0.3em}
+        \textbf{tensor} parallel 8 --- within a node, over NVLink\\[0.2em]
+        \textbf{pipeline} parallel 8--16 --- across nodes\\[0.2em]
+        \textbf{data} parallel / FSDP --- across everything else\\[0.2em]
+        \textbf{context} parallel --- added only for the long-context phase\\[0.2em]
+        \textbf{expert} parallel --- if the model is an MoE
+      \end{block}
+      \vspace{0.3em}
+      \small
+      Llama 3 405B used 4D parallelism across up to 16\,384 H100s.
+    \end{column}
+  \end{columns}
+  \source{Liu et al., \textit{Ring Attention}, 2023;
+          Grattafiori et al., \textit{The Llama 3 Herd of Models}, 2024.}
+  \note{Context parallelism is the newest of the four and the one most tied to
+  the long-context arms race. Note that Llama 3 turned it on only for the
+  long-context stage, which is a nice concrete illustration that the
+  parallelism configuration changes during a run.
+
+  The composition box is what to photograph. The ordering is not arbitrary: the
+  most communication-hungry axis goes on the fastest link, and so on outward.
+  From that one principle they can reconstruct the configuration themselves.}
+\end{frame}
+\fi
+
+\begin{frame}[shrink=16]{Precision}
+  A number format splits its bits between the \key{exponent}, which sets how
+  large or small a value it can represent, and the \key{mantissa}, which sets
+  how many significant digits it keeps.
+
+  \vspace{0.5em}
+  \centering
+  \begin{tabular}{@{}l c c L{5.0cm}@{}}
+    \toprule
+    \textbf{Format} & \textbf{Exponent} & \textbf{Mantissa} & \textbf{Why it matters}\\
+    \midrule
+    fp32 & 8 & 23 & master weights and optimiser state\\[0.3em]
+    fp16 & 5 & 10 & \alert{overflows}; needs loss scaling\\[0.3em]
+    bf16 & 8 & 7 & \good{fp32's range}, fewer digits\\[0.3em]
+    fp8 (E4M3) & 4 & 3 & 2$\times$ throughput; per-block scaling\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.6em}
+  \raggedright
+  \key{Why bf16 became common:} it keeps fp32's exponent range, which reduces
+  overflow and underflow problems compared with fp16, while retaining
+  half-precision storage and matrix operations.
+  \vspace{0.3em}
+
+  DeepSeek V3 used \key{fp8} for selected operations, with higher precision
+  where needed. The potential speed-up depends on hardware, kernels and the
+  scaling strategy.
+  \source{DeepSeek-AI, \textit{DeepSeek-V3 Technical Report}, Dec 2024;
+          Micikevicius et al., \textit{Mixed Precision Training}, 2018.}
+  \note{The exponent-versus-mantissa framing is the whole slide. Say it as a
+  slogan: in deep learning you need dynamic range, not decimal places.
+
+  Two things the table had to drop. fp32 is also the reference format that
+  everything else is measured against, and bf16 needs no loss scaling at all,
+  which is most of why people switched to it. fp8 is still not routine outside
+  the largest labs.
+
+  Loss scaling is the standard fp16 workaround: multiply the loss before the
+  backward pass so small gradients remain representable, then divide the
+  gradients before the update. bf16 reduces the need for this because it has a
+  wider exponent range, although implementations still need numerical checks.
+
+  On fp8: the interesting part is how much care it takes. DeepSeek used
+  fine-grained per-tile scaling with fp32 accumulation at the sensitive
+  operations. Their report is unusually explicit about which operations they
+  kept in higher precision, and it is good reading.}
+\end{frame}
+
+\begin{frame}{MFU: how much of the hardware is doing model work}
+  \key{Model FLOPs utilisation (MFU)} compares estimated model arithmetic with
+  the peak arithmetic the allocated GPUs could have performed:
+  \[
+    \mathrm{MFU} \;=\;
+      \frac{6ND}{\text{run time}\;\times\;\text{number of GPUs}
+                 \;\times\;\text{peak rate}}
+  \]
+  \emph{In words:} how much of the available compute became useful model
+  operations?
+  \vspace{0.5em}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{Why it is below 100\%}
+      \begin{itemize}\small
+        \item GPUs wait for data and communication
+        \item norms and softmax do not reach matrix-multiply peak
+        \item checkpointing repeats work
+        \item small matrices do not fill the GPU
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{What it is used for}
+        \small
+        Track MFU while tuning one training system. A sudden drop can reveal a
+        data-loader, communication or kernel problem.
+        \vspace{0.4em}
+        Comparisons across models, hardware or numeric formats need care because
+        both $6ND$ and ``peak rate'' are approximations.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \note{The point is not a universal ``good'' percentage. MFU is most useful as
+  a within-system diagnostic: hold the model and hardware fixed, make one
+  change, and check whether useful throughput improves. Tiny Lab 1 models will
+  have low utilisation because their matrix operations are too small.}
+\end{frame}
+
+\begin{frame}{Large training runs fail regularly}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      Llama 3 405B, over a \textbf{54-day} pretraining window on 16k H100s:
+      \begin{itemize}\small
+        \item \textbf{466} job interruptions
+        \item \textbf{419} of them unexpected
+        \item \textbf{78\%} of the unexpected ones were hardware --- GPU
+          failures most of all
+        \item effective training time still above \textbf{90\%}, because the
+          recovery was automated
+        \item power draw across the datacentre swinging by tens of megawatts as
+          thousands of GPUs ramped together
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{What this looks like from inside}
+        \small
+        Silent data corruption that shows up only as a loss that is slightly
+        too high.\\[0.3em]
+        NaN hunts that take three days and end at one bad node.\\[0.3em]
+        Checkpoint cadence as an explicit trade: a 405B optimiser state is
+        about 6.5\,TB, so writing it costs real minutes.\\[0.3em]
+        On LUMI, the same class of problems plus an immature software stack
+        that absorbed a large share of the project's engineering.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \source{Grattafiori et al., \textit{The Llama 3 Herd of Models}, 2024;
+          personal experience, Poro / Viking on LUMI, 2023--2024.}
+  \note{This slide tells them what the job is actually like. Tell it warmly
+  rather than reading the list. Most of what happens on a large pretraining run
+  is operations work.
+
+  The number to quote is 419 unexpected interruptions in 54 days, roughly eight
+  a day, on the best-engineered run that has been documented publicly.
+
+  The LUMI anecdote is first-hand, so take thirty seconds. What surprised me
+  most was how much of the calendar went into making the software stack work at
+  all on hardware nobody else was training LLMs on.
+
+  Clock check: should be around 17:15 here.}
+\end{frame}
+
+% This repeats the compute/cost comparison and is kept only as reference.
+\iffalse
+\begin{frame}[shrink=14]{What a run costs, in three currencies}
+  \centering
+  \begin{tabular}{@{}L{2.6cm} L{2.6cm} L{2.3cm} L{3.2cm}@{}}
+    \toprule
+    \textbf{Run} & \textbf{GPU-hours} & \textbf{Wall clock} & \textbf{Money}\\
+    \midrule
+    Llama 3 405B & 30.8M H100-h & 54 days on 16k GPUs & about \$62M at \$2/h\\[0.3em]
+    DeepSeek V3 & 2.79M H800-h & about 2 months on 2k GPUs & about \$5.6M at \$2/h\\[0.3em]
+    Poro 34B & a few hundred LUMI GPUs & several weeks & a national allocation\\[0.3em]
+    Your Lab 1 run & about 0.3 GPU-h & 20 minutes & under one euro\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.9em}
+  \raggedright
+  \small
+  The scarcest of the three is usually \key{wall clock}.
+  You cannot buy a fifty-four-day run in a week by adding GPUs indefinitely,
+  because communication costs grow and the bubble grows with them. That is why
+  the architecture gets frozen months before anybody sees the model.
+  \vspace{0.4em}
+
+  Meta reported about 11\,390 tonnes of CO$_2$-equivalent for training the
+  Llama 3 family, on a location-based accounting.
+  \source{Grattafiori et al.\ 2024; DeepSeek-AI 2024. Dollar figures use each
+          paper's own assumed rental rate and are not what the owners paid.}
+  \note{The wall-clock point is the one practitioners feel first. Scaling to
+  more GPUs has sharply diminishing returns, so a big model takes months no
+  matter how rich you are, and that fixes a long lead time into every decision.
+  It is exactly the Poro retrospective from earlier.
+
+  Mention the carbon figure without editorialising. It is in the paper, it is
+  the only number of its kind published at that scale, and the honest framing is
+  that inference emissions across a model's lifetime dwarf it.
+
+  Then move on briskly; mid-training is short and section six needs its ten
+  minutes for the demo.}
+\end{frame}
+\fi
+
+% =====================================================================
+\section{Mid-training}
+% =====================================================================
+
+\begin{frame}{Mid-training: targeted continued pretraining}
+  \centering
+  \begin{tikzpicture}[node distance=4mm]
+    \node[mod, minimum width=24mm] (pre) {pretraining\\{\tiny trillions of tokens, general web}};
+    \node[modhi, minimum width=24mm, right=of pre] (mid) {mid-training\\{\tiny $10^{10}$--$10^{11}$ tokens, specialised}};
+    \node[mod, minimum width=24mm, right=of mid] (post) {post-training\\{\tiny SFT, DPO, RLVR}};
+    \draw[flow] (pre) -- (mid);
+    \draw[flow] (mid) -- (post);
+  \end{tikzpicture}
+  \vspace{1.0em}
+
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{Same objective, different data.} Mid-training is still
+      next-token prediction with AdamW. What changes is that the mixture is
+      chosen deliberately rather than scraped.
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \textbf{Why it exists.} The cheapest place to install a capability is
+      usually the last few per cent of pretraining, rather than the start of a
+      trillion-token run or a fine-tune on a hundred thousand examples.
+    \end{column}
+  \end{columns}
+  \vspace{0.6em}
+  \centering
+  \small
+  The term only stabilised around 2024--2025. Before that the same work was
+  called ``annealing'', ``the decay phase'', ``continued pretraining'' or nothing at all.
+  \source{OLMo 2 (Allen AI, 2024) is the clearest publicly documented example;
+          Raschka, \textit{The State of LLMs}, 2025, on the terminology.}
+  \note{Flag the terminology explicitly, because students reading papers from
+  2022 to 2026 will meet four different names for the same stage and assume
+  they are four different things.
+
+  The definition to give is operational: if the loss is cross-entropy and the
+  optimiser is AdamW and the data is curated rather than crawled, it is
+  mid-training. Everything else is a judgement call.
+
+  Say up front that this section is three ideas --- long context, annealing,
+  capability injection --- so they know it is short.}
+\end{frame}
+
+\begin{frame}[shrink=8]{Long-context extension: the problem}
+  Pretraining at 128k context is wasteful: attention is quadratic, activation
+  memory is linear in sequence length, and almost no documents are that long.
+  So you pretrain short, at 4k or 8k, and extend afterwards.
+  \vspace{0.6em}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \textbf{Why you cannot just feed it more tokens.} RoPE encodes position by
+      rotating each attention dimension by an angle proportional to the token's
+      position. Think of a bank of clocks, each ticking at a different speed,
+      with the whole range set by a number called the \key{base}, usually
+      $10^4$.
+      \vspace{0.4em}
+
+      Past the positions seen in training, the fast clocks have wrapped around
+      many times into a combination of readings the model has never encountered.
+      Attention degenerates.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Base scaling, the blunt fix}
+        \small
+        Increase the base: $10^4 \to 5\times10^5$ (Llama 3) or higher. Every
+        frequency slows down, so the same position index maps to a smaller
+        angle and more positions fit inside the range the model knows.
+        \vspace{0.4em}
+        It works, but you pay for it in resolution on \emph{local} position,
+        which is what the model leans on most.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \source{Su et al., RoFormer, 2021; Grattafiori et al.\ 2024.}
+  \note{The wrap-around intuition is the one to give: RoPE is a set of clocks
+  running at different speeds, and extrapolating past training length means
+  reading a clock configuration that never occurred during training.
+
+  The formula behind the clock metaphor, if anyone wants it: dimension pair $i$
+  of a head of width $d$ rotates at angular frequency
+  $\theta_i = \text{base}^{-2i/d}$, so $i = 0$ is the fastest clock and
+  $i = d/2$ the slowest. Raising the base stretches the whole bank towards
+  slower rotation.
+
+  Base scaling is the one-line fix and it is what most models actually ship.
+  Make sure they see what it costs. Slowing all the clocks down also slows the
+  fast ones that encode ``the previous few tokens'', and that is where most of
+  the useful signal sits.}
+\end{frame}
+
+% Position-interpolation details are deferred to the inference lecture.
+\iffalse
+\begin{frame}{YaRN, and the two routes to long context}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \key{YaRN} applies base scaling selectively:
+      \begin{itemize}\small
+        \item leave the \textbf{high-frequency} dimensions alone, so local
+          position stays sharp
+        \item interpolate the \textbf{low-frequency} dimensions, which carry
+          long-range position
+        \item nudge the sharpness of attention, because spreading it over a much
+          longer context otherwise flattens it
+        \item then fine-tune briefly on long documents
+      \end{itemize}
+      \vspace{0.4em}
+      Typically buys a 4--8$\times$ extension for a small fraction of a per cent
+      of the pretraining compute.
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{Route A: extend after the fact}
+        \small
+        \textbf{Qwen3 235B-A22B}: 32k native, \textbf{131k with YaRN}.
+      \end{block}
+      \begin{block}{Route B: build it into the architecture}
+        \small
+        \textbf{Qwen3-Next 80B-A3B}: \textbf{262k native}, which is affordable
+        only because three of every four attention layers are linear-attention
+        blocks with a context-independent state size.
+      \end{block}
+      \vspace{0.3em}
+      \small
+      You are looking at the same decision Tuesday's attention slides
+      described, taken at a different point in the pipeline.
+    \end{column}
+  \end{columns}
+  \source{Peng et al., \textit{YaRN}, 2023; Raschka,
+          \textit{A Dream of Spring for Open-Weight LLMs}, Feb 2026.}
+  \note{The two-route framing is what makes this slide worth its place. A
+  config that says 262k native and a config that says 32k-extended-to-131k
+  describe completely different engineering, and the difference is visible in
+  the attention design from Tuesday.
+
+  Practical consequence they will hit: a YaRN-extended model is usually
+  configured with the scaling factor in config.json, and applying it when you
+  do not need long context makes short-context quality slightly worse. Several
+  stacks therefore enable it only on request.}
+\end{frame}
+\fi
+
+\begin{frame}[shrink=8]{Annealing on a higher-quality mixture}
+  \begin{columns}[T]
+    \begin{column}{0.54\textwidth}
+      During the decay phase of a WSD schedule, swap the data mixture for a
+      small, very high-quality one and let the learning rate fall to near zero.
+      \vspace{0.5em}
+
+      \textbf{Why use the decay phase?} It provides a short, inexpensive stage
+      in which the data mixture can be changed and compared. A useful intuition
+      is that smaller late updates refine the model without repeating the full
+      pretraining run; the exact mechanism is still an empirical question.
+      \vspace{0.5em}
+
+      \textbf{OLMo 2} is the documented example: a curated mixture of
+      high-quality web, maths and instruction-like data, applied over the final
+      50B to 300B tokens, then several annealed runs averaged into one model.
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{block}{Why WSD and annealing fit together}
+        \small
+        A cosine schedule has no flat phase to branch from, so annealing means
+        re-planning the whole run.
+        \vspace{0.4em}
+        With WSD you keep one stable-phase checkpoint and anneal it several
+        times over, varying the mixture, the budget or the target language, for
+        a few per cent of the cost each.
+        \vspace{0.4em}
+        This flexibility is an important reason WSD became common.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \source{OLMo 2 (Allen AI, 2024); Hu et al., \textit{MiniCPM}, 2024.}
+  \note{Call back to the schedule plot from section one and point at the final
+  decay. This is where that corner of the curve earns its keep.
+
+  The mechanism is intuitive and roughly right: what the model sees while the
+  learning rate is small has outsized influence. The same mechanism is behind
+  catastrophic forgetting in week 2, so plant that connection here.
+
+  The reusable-checkpoint argument is the one that persuades practitioners. You
+  pay for one stable phase and get several finished models out of it.}
+\end{frame}
+
+\begin{frame}{What targeted data can add}
+  What actually goes into a mid-training mixture, and why:
+
+  \vspace{0.4em}
+  \centering
+  \begin{tabular}{@{}L{3.6cm} L{7.2cm}@{}}
+    \toprule
+    \textbf{Ingredient} & \textbf{What it is for}\\
+    \midrule
+    maths & symbolic step chains; the best lever on reasoning\\[0.25em]
+    code & structure and verifiable chains; lifts reasoning\\[0.25em]
+    long documents & teaches the model to \emph{use} its context window\\[0.25em]
+    instruction-like text & question-answer formatting for SFT to grip\\[0.25em]
+    target language & the cheapest place to add a new language\\[0.25em]
+    synthetic textbooks & dense explanatory prose; narrows the distribution\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.5em}
+  \raggedright
+  \small
+  By the bottom two rows, mid-training is hard to tell apart from SFT without
+  the loss masking.
+  \source{OLMo 2 (2024); Aryabumi et al., \textit{To Code or Not To Code?}, 2024;
+          Gunasekar et al., \textit{Textbooks Are All You Need}, 2023.}
+  \note{Two rows deserve a gloss beyond what is on the slide. Code lifts
+  general reasoning, not only coding ability, which is why labs put it in even
+  when they do not care about code. Synthetic textbooks work well and they also
+  narrow the model's output distribution, so a model trained on too many of
+  them writes in one register.
+
+  The row worth dwelling on is instruction-like text. Putting
+  question-answer formatted documents into the \emph{pretraining} mixture makes
+  the later SFT stage dramatically more effective, because the format is
+  already in the model's distribution and SFT only has to select it rather than
+  install it.
+
+  That observation is also the cleanest preview of next Tuesday's central
+  claim: post-training selects behaviour that pretraining made possible.}
+\end{frame}
+
+% Terminology detail retained for reference; the main lecture uses the
+% operational definition on the opening mid-training slide.
+\iffalse
+\begin{frame}[shrink=10]{Where mid-training ends and post-training begins}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{Where people draw the line}
+      \begin{itemize}\small
+        \item loss on all tokens $\Rightarrow$ mid-training;
+          loss on assistant tokens only $\Rightarrow$ SFT
+        \item documents $\Rightarrow$ mid-training;
+          templated conversations $\Rightarrow$ SFT
+        \item learning rate still decaying from the pretraining schedule
+          $\Rightarrow$ mid-training
+      \end{itemize}
+      \vspace{0.5em}
+      \textbf{Why the line will not hold.} All three criteria are conventions,
+      and some published recipe violates each of them. Nothing in the
+      mathematics tells the stages apart.
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{What to take from this}
+        \small
+        When you read a model report, do not ask which stage something is in.
+        Ask three concrete questions:
+        \vspace{0.3em}
+        \emph{what data?} \quad \emph{what loss, on which tokens?} \quad
+        \emph{what learning rate?}
+        \vspace{0.4em}
+        Those three answers determine the model. The stage names are
+        bookkeeping.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \vfill
+  \begin{takeaway}
+    Mid-training is where a general model becomes \emph{your} model, at one per
+    cent of the cost of pretraining. That is why so much of the field's
+    attention has moved here since 2024.
+  \end{takeaway}
+  \note{The three questions in the box are the transferable part and they are
+  worth writing on the board. They work for every training stage in this
+  course, including everything next Tuesday.
+
+  Resist the temptation to give a crisp definition of mid-training. There is
+  not one, and pretending otherwise would teach them to argue about vocabulary
+  instead of reading recipes.
+
+  Clock check: should be around 17:27 here. The demo needs ten minutes and it
+  is the best part of the lecture, so protect it.}
+\end{frame}
+\fi
+
+% =====================================================================
+\section{What pretraining buys}
+% =====================================================================
+
+\begin{frame}[fragile]{In-context learning, live}
+  \demo{a base model, with no instruction tuning and no chat template.}
+\begin{lstlisting}
+Review: The food was cold and the waiter ignored us.  Sentiment: negative
+Review: Beautiful room, spotless, and the staff were kind.  Sentiment: positive
+Review: It arrived late and the box was crushed.  Sentiment: negative
+Review: Exactly what I wanted, and cheaper than the shop.  Sentiment:
+\end{lstlisting}
+  \vspace{0.3em}
+  The model completes \texttt{\ positive}. Nobody trained it to classify
+  sentiment, and no weight was updated.
+  \vspace{0.5em}
+
+  It picked up sentiment classification \textbf{from the prompt}, because the
+  prompt is a document whose most likely continuation is the correct label.
+  \vspace{0.4em}
+
+  \key{In-context learning} is the emergent capability that made the whole
+  prompting era possible. You get it free from next-token prediction on a
+  corpus that happens to contain lists, tables and worked examples.
+  \source{Brown et al., \textit{Language Models are Few-Shot Learners}, 2020.}
+  \note{Run this live on Roihu. The machine is up today, maintenance is not
+  until 3 and 4 November. Use a genuine base model, not an instruct model, and
+  say so, because the whole point collapses if someone thinks this is chat.
+
+  The sentence that lands: the model is continuing a document, and in that
+  document the next thing after the fourth ``Sentiment:'' is a label.
+  Classification falls out of continuation.
+
+  If the few-shot prompt fails on the first try, that is also a useful lesson.
+  Base models are sensitive to formatting, and a stray newline changes the
+  answer.}
+\end{frame}
+
+\begin{frame}{What in-context learning means}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{What happens.} The prefix changes the model's \emph{conditional
+      distribution}. No weights move, and the effect disappears as soon as the
+      context does.
+      \vspace{0.5em}
+
+      \textbf{What to be careful about.} Calling it learning is a stretch.
+      There is a real literature analysing it as gradient descent inside the
+      forward pass, but the case is suggestive rather than settled.
+      \vspace{0.5em}
+
+      \textbf{Empirically}: performance rises with the number of examples, with
+      the consistency of the \emph{format}, and surprisingly weakly with whether
+      the labels in the examples are actually correct.
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{Why it emerges at all}
+        \small
+        The pretraining corpus is full of documents in which a pattern is
+        established and then continued: glossaries, tables, translation pairs,
+        exercise-and-answer sets, code with consistent conventions.
+        \vspace{0.4em}
+        A model that models those documents well \emph{must} learn to infer a
+        rule from a prefix and apply it. There was never a separate objective
+        for this.
+      \end{block}
+      \vspace{0.3em}
+      \small
+      In Lab 1 Part D you run the same few-shot prompt on your tiny model and on
+      a larger base model. Treat this as a qualitative comparison: scale,
+      architecture, tokenizer and training data all differ.
+    \end{column}
+  \end{columns}
+  \source{Brown et al.\ 2020; Min et al., \textit{Rethinking the Role of
+          Demonstrations}, 2022.}
+  \note{The label-correctness result is the fun one: shuffling the labels in
+  few-shot demonstrations degrades performance much less than you would expect,
+  which suggests the demonstrations are mostly specifying the \emph{task and
+  the format} rather than teaching the mapping.
+
+  Use that to set up the honest position: we have good empirical
+  characterisations of in-context learning and no settled mechanistic account.
+  This is a live research area and a reasonable thesis topic.
+
+  Point at Part D. Their 20M model will show essentially no in-context learning,
+  and that negative result is the whole purpose of the exercise.}
+\end{frame}
+
+\begin{frame}[fragile]{Now ask it a question}
+  \demo{the same base model, same session, no few-shot examples.}
+\begin{lstlisting}
+Prompt:  What is the capital of Finland?
+
+Output:  What is the capital of Sweden?
+         What is the capital of Norway?
+         What is the largest city in Finland?
+         What is the population of Helsinki?
+         Answer the following questions in complete sentences.
+         1. What is the capital of Finland? ____________
+         2. What is ...
+\end{lstlisting}
+  \vspace{0.3em}
+  Nothing has necessarily gone wrong here. More questions are one plausible
+  continuation because question lists and worksheets occur in the pretraining
+  corpus.
+  \vspace{0.4em}
+
+  \alert{And it will not stop.} No token in the corpus reliably means ``the
+  assistant has finished its turn'', because there is no assistant.
+  \note{This is the pivot of the whole week and it deserves a pause. Let the
+  output run on the screen for a few seconds longer than is comfortable.
+
+  The framing that matters: what we trained and what we wanted are two
+  different things. The model is a very good model of documents. We wanted an
+  assistant, and we never asked for one.
+
+  Then name the two specific missing things, turn-taking and stopping, because
+  those are mechanical, concrete, and fixed in exactly one way, which is
+  Tuesday's lecture.}
+\end{frame}
+
+\begin{frame}[shrink=10]{What the base model does not have}
+  \centering
+  \begin{tabular}{@{}L{4.2cm} L{6.6cm}@{}}
+    \toprule
+    \textbf{Missing} & \textbf{Why pretraining could not supply it}\\
+    \midrule
+    stopping & no end-of-turn token exists in web documents\\[0.25em]
+    turn-taking & no notion of ``user'' and ``assistant'' roles\\[0.25em]
+    instruction following & instructions occur, but obeying them is rarely the
+      likeliest continuation\\[0.25em]
+    a preferred answer & good and bad answers appear at their web
+      frequencies\\[0.25em]
+    refusal & declining a request is rare, and inconsistent where it
+      occurs\\[0.25em]
+    a consistent persona & the corpus is millions of different authors\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.6em}
+  \raggedright
+  \small
+  Every row is a problem of \textbf{selection} rather than \textbf{knowledge}.
+  The few-shot demo showed the base model can produce the right behaviour; it
+  just does not reach for it by default. That is the thesis of next Tuesday.
+  \source{Ouyang et al., \textit{InstructGPT}, 2022, for the original framing.}
+  \note{Say the selection-versus-knowledge sentence slowly. It is the opening
+  claim of lecture three and the thing students most often get backwards. They
+  arrive believing fine-tuning teaches the model facts, when what it mostly
+  does is select and shape behaviour pretraining already made possible.
+
+  On the fourth row, spell out that web frequency is a poor proxy for quality:
+  the corpus is full of confident wrong answers, and a base model will happily
+  reproduce them at the rate they appear.
+
+  The evidence for the claim is already on the previous two slides: the same
+  weights that rambled at a direct question classified sentiment correctly when
+  the format made the behaviour likely. The capability was there. The default
+  was wrong.}
+\end{frame}
+
+% Detailed metric discussion is deferred to the evaluation lecture.
+\iffalse
+\begin{frame}{Perplexity against downstream accuracy}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      Within one model family, on one tokenizer, over one data mixture, lower
+      validation loss reliably means better downstream performance. That is why
+      loss is a usable training signal at all.
+      \vspace{0.5em}
+
+      \textbf{They come apart when:}
+      \begin{itemize}\small
+        \item the tokenizers differ, so the unit itself changes
+        \item the data mixtures differ, and some corpora are simply easier
+        \item the benchmark is near chance at that scale, so it measures noise
+        \item the capability is bottlenecked by \emph{format} rather than by
+          knowledge
+        \item the evaluation corpus is in the training set
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{The practical rule}
+        \small
+        Use loss to decide whether a \textbf{run is healthy}.
+        \vspace{0.4em}
+        Use downstream evaluation to decide whether a \textbf{model is good}.
+        \vspace{0.4em}
+        Do not substitute one for the other, and do not compare losses across
+        tokenizers. That was the first gotcha of the lecture, ninety minutes
+        ago.
+      \end{block}
+      \vspace{0.3em}
+      \small
+      Week 4 is entirely about the second half of that rule.
+    \end{column}
+  \end{columns}
+  \note{Close the loop with the first gotcha explicitly. Students respond well
+  to a callback and it signals that the lecture was built rather than
+  assembled.
+
+  The format-bottleneck bullet is the one that will bite them in week 2: a
+  model that knows the answer and will not emit it in the expected format
+  scores zero, and its loss will look fine.
+
+  Keep this brief. One more slide in this section.}
+\end{frame}
+\fi
+
+\begin{frame}[shrink=11]{What pretraining gives us}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \textbf{What pretraining produced}
+      \begin{itemize}\small
+        \item a compressed model of a large slice of human text
+        \item world knowledge, syntax, code semantics, arithmetic, discourse
+          structure
+        \item the ability to infer a task from a prefix and continue it
+        \item a representation good enough that a few thousand examples can
+          redirect its behaviour
+      \end{itemize}
+      \vspace{0.5em}
+      \textbf{What it did not produce}
+      \begin{itemize}\small
+        \item reliable assistant-style turn-taking, instruction following or
+          stopping behaviour
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Why base models are still released}
+        \small
+        A base model is a useful starting point when researchers want to study
+        or shape behaviour without an existing instruction-tuning policy.
+        \vspace{0.4em}
+        Lab 2 compares a base model with a corresponding instruct model. You
+        may use a different suitable pair from the one used elsewhere in your
+        project.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \vfill
+  \begin{takeaway}
+    Pretraining supplies broad language and task capability. Post-training can
+    select, strengthen and sometimes add behaviours using much less compute,
+    but it still depends on what the base model can represent.
+  \end{takeaway}
+  \note{Use the takeaway to distinguish broad capability learned from large
+  corpora from the more targeted behaviour shaping in post-training. The
+  distinction is useful, but not absolute: later training can add knowledge and
+  capabilities too.
+
+  Remind them that this is exactly why the course spends one lecture on
+  pretraining, which they will probably never do, and two on post-training and
+  inference, which they certainly will.
+
+  Clock check: should be around 17:37 here. Lab briefing next, eight minutes,
+  then out on time.}
+\end{frame}
+
+% =====================================================================
+\section{Lab 1 briefing}
+% =====================================================================
+
+\begin{frame}[shrink=12]{Lab 1: from tokenizer to tiny GPT}
+  \begin{columns}[T]
+    \begin{column}{0.56\textwidth}
+      \textbf{A. Tokenizer} \hfill \textit{CPU Jupyter, about 1 h}\\
+      Byte-level BPE on a Finnish Wikipedia slice at two or three vocabulary
+      sizes, then compare fertility against Qwen3.5 and Gemma 4 on FLORES-200.
+      \vspace{0.3em}
+
+      \textbf{B. Tiny GPT} \hfill \textit{GPU batch, about 20 min / run}\\
+      Train a 10--30M-parameter decoder with \emph{your} tokenizer. Script and
+      Slurm template provided.
+      \vspace{0.3em}
+
+      \textbf{C. Scaling} \hfill \textit{3 GPU batch jobs}\\
+      Three model sizes at a fixed token budget. Plot validation loss against
+      compute, estimating compute as $6ND$.
+      \vspace{0.3em}
+
+      \textbf{D. Tiny versus pretrained} \hfill \textit{GPU Jupyter, about 20 min}\\
+      The same few-shot prompt on your tiny model and on a real base model.
+      \vspace{0.3em}
+
+      \textbf{E. Project} \hfill \textit{planning}\\
+      Choose a task, model and held-out set. You may revise this later.
+    \end{column}
+    \begin{column}{0.44\textwidth}
+      \begin{block}{How the parts connect to the lectures}
+        \small
+        the training loop and the loss curve $\Rightarrow$ B\\[0.25em]
+        $C \approx 6ND$ and scaling laws $\Rightarrow$ C\\[0.25em]
+        in-context learning $\Rightarrow$ D\\[0.25em]
+        and Tuesday's tokenization $\Rightarrow$ A
+      \end{block}
+      \vspace{0.3em}
+      \small
+      A complete run of the three supplied model sizes should use roughly
+      \textbf{one GPU-hour} in total.
+      \vspace{0.5em}
+
+      Start with \texttt{lab1-example/README.md}; it includes a CPU smoke test,
+      the training script, configurations and plotting code.
+    \end{column}
+  \end{columns}
+  \note{In Part A, run the fertility comparison in English, Finnish and one
+  more language of their choice. Part B's provided script is about 300 lines,
+  so they should read it rather than treat it as a black box.
+
+  Map each part back to a slide from this week out loud. It makes the lab feel
+  like a consequence of the lectures rather than a separate chore.
+
+  Recommend doing A before B, then C and D after one training run works. Part E
+  can be drafted at any point and revised later.
+
+  One GPU-hour each is worth saying because every year somebody is afraid of
+  using the allocation and runs nothing.}
+\end{frame}
+
+% The runnable template is in lab1-example/slurm/train.slurm.
+\iffalse
+\begin{frame}[fragile]{The Slurm template}
+\begin{lstlisting}[language=slurm]
+#!/bin/bash
+#SBATCH --account=project_2021893
+#SBATCH --partition=gputest         # debug here first; 15 min cap
+#SBATCH --nodes=1
+#SBATCH --gres=gpu:1                # one GH200
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=64G
+#SBATCH --time=00:15:00
+#SBATCH --output=logs/%x-%j.out
+
+module purge
+module load pytorch
+
+srun python train_tiny_gpt.py \
+     --config configs/medium.yaml --compile
+\end{lstlisting}
+  \vspace{0.2em}
+  \small
+  For Part C, use \texttt{small.yaml}, \texttt{medium.yaml} and
+  \texttt{large.yaml}. Keep the tokenizer, token budget and seed fixed. After
+  the smoke test, use \texttt{gpumedium} and request enough time. \quad
+  \texttt{sbatch} \textbullet\ \texttt{squeue -{}-me} \textbullet\
+  \texttt{seff <jobid>}
+  \note{The rule from Tuesday, repeated because it is the one that saves them
+  the most time: debug on gputest, with a tiny token budget, until the script
+  runs end to end. Only then move to gpumedium.
+
+  Point at the seed flag. Fixed seeds are the difference between a scaling plot
+  that means something and three runs that differ for unknown reasons.
+
+  Point out what changes in Part C: layer count, width and head count. The data,
+  tokenizer, token budget and random seed stay fixed. That makes this a
+  controlled scaling comparison rather than three unrelated runs.}
+\end{frame}
+\fi
+
+\begin{frame}{How to check that a run is working}
+  \centering
+  \begin{tabular}{@{}L{3.4cm} L{3.4cm} L{4.0cm}@{}}
+    \toprule
+    \textbf{Check} & \textbf{Expected pattern} & \textbf{If it differs}\\
+    \midrule
+    first-step loss & close to $\ln(V)$; about 10.4 for 32k tokens &
+      check initialization, vocabulary and labels\\[0.25em]
+    training loss & falls quickly, then more slowly & inspect the learning rate
+      and batches\\[0.25em]
+    validation loss & follows training loss & check the split and possible
+      overfitting\\[0.25em]
+    throughput & becomes stable after warmup & inspect the data loader and GPU
+      utilisation\\[0.25em]
+    output files & metrics, summary and weights exist & read the end of the job
+      log\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.6em}
+  \raggedright
+  \small
+  \key{The one-line sanity check}: your initial loss should be close to the log
+  of your vocabulary size, and $\ln 32000 \approx 10.4$. If your run starts
+  far from that value, investigate before spending GPU time.
+  \note{A randomly initialised model often predicts close to uniformly, making
+  $\ln(V)$ a useful approximate sanity check. It is not a proof that target
+  alignment is correct: a shifted target can produce a similar initial loss.
+  Stronger checks are that loss stays finite, falls on a short run and can
+  overfit a tiny repeated batch. The reference implementation tests the full
+  pipeline and falling finite loss on a bundled fixture.}
+\end{frame}
+
+\begin{frame}{Material for the final report}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \begin{enumerate}
+        \item a \key{fertility table} covering your tokenizers and two
+          production tokenizers, across three languages
+        \item \key{loss curves} for all your runs, on one set of axes
+        \item a \key{scaling plot} of validation loss against $6ND$, log--log
+        \item one paragraph comparing \key{your run's compute} with a published
+          frontier run, using $6ND$ for both
+        \item your project plan: task, model and held-out set
+      \end{enumerate}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{What makes the analysis useful}
+        \small
+        A number with the method that produced it, and a sentence saying what
+        you concluded from it.
+        \vspace{0.4em}
+        If a result surprises you, investigate it and record what you checked.
+        \vspace{0.4em}
+        ``The three runs did not order the way I expected, and here is what I
+        checked'' is a good paragraph.
+      \end{block}
+      \vspace{0.3em}
+      \small
+      Keep the scripts, configurations and machine-readable result files in
+      your repository. There is no separate Lab 1 submission.
+    \end{column}
+  \end{columns}
+  \note{Item four is the one that connects the lecture to the lab most
+  directly, and it is the one most often skipped. They should produce two FLOP
+  figures with the same equation and then say something honest about the ratio.
+
+  Repeat the grading principle from Tuesday: we grade measured results and the
+  decisions drawn from them, rather than effort described. The lab is small
+  enough that everyone can get the numbers, so what they say about them is what
+  separates the reports.}
+\end{frame}
+
+\begin{frame}{Working on Lab 1}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \begin{itemize}
+        \item \alert{Roihu is down for maintenance on 3--4 November.} Those are
+          not available for GPU work.
+        \item \key{There is no supervised lab this week.} The next time we are
+          all in a room with GPUs is 5 November.
+        \item Questions go to the course channel. It is watched all week and
+          answers are visible to everybody.
+        \item There is no intermediate submission. Keep your work for the final
+          report and repository.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{If something breaks}
+        \small
+        Post the \textbf{job id}, the \textbf{command}, and the \textbf{last
+        twenty lines} of the log. Three quarters of problems are solved from
+        that alone.
+        \vspace{0.4em}
+        Do not post screenshots of a terminal.
+      \end{block}
+      \vspace{0.3em}
+      \begin{block}{A useful starting point}
+        Run the bundled CPU smoke test, then Part A. This checks your
+        environment and data flow before you request GPU time.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \note{Mention the maintenance window and post it in the course channel.
+  Students can do the tokenizer work and inspect the implementation without a
+  GPU.
+
+  The bug-report format is worth insisting on from week one. It trains a habit
+  that makes the next six weeks much cheaper for everybody, and it is the same
+  information a colleague would want.}
+\end{frame}
+
+% =====================================================================
+% A second title-only summary slide is not needed in a 90-minute lecture.
+\iffalse
+\begin{frame}[standout]
+  Three things to remember
+  \note{Say these three cleanly and slowly. They are reused verbatim in the
+  week 7 wrap-up, and they are the examinable summary of the lecture.
+
+  Then one deep breath before the hand-off slide, which is thirty seconds and
+  sets up Tuesday.}
+\end{frame}
+\fi
+
+\begin{frame}{Three things to remember}
+  \begin{enumerate}
+    \item \key{$C \approx 6ND$ gives a useful first estimate of training
+      compute.} Two FLOPs per parameter per token forward and about four
+      backward. Remember what the approximation leaves out.
+      \vspace{0.6em}
+    \item \key{Data choices strongly affect model quality.} Inspect the data
+      for obvious problems, then compare pipeline choices by training small,
+      controlled models and evaluating them.
+      \vspace{0.6em}
+    \item \key{A deployed model may be trained past the compute-optimal point.}
+      Extra training can produce a smaller model with lower inference cost,
+      trading a one-time expense for repeated savings.
+  \end{enumerate}
+  \vfill
+  \small
+  And one number to carry: \textbf{16 bytes per parameter} to train in mixed
+  precision, against 2 to serve.
+  \note{Deliver these as three sentences, not as a slide to be read. Pause
+  after each.
+
+  If anyone asks which one matters most, say the second. The first is
+  arithmetic and the third is a business decision, while the second is a
+  research method they can apply to any dataset question for the rest of their
+  careers.}
+\end{frame}
+
+\begin{frame}{Tuesday: the model that will not stop talking}
+  \begin{columns}[T]
+    \begin{column}{0.54\textwidth}
+      We ended on a base model that answered a question with more questions and
+      then kept going.
+      \vspace{0.5em}
+
+      Nobody patches that. It is the gap between a model of \emph{documents}
+      and an \emph{assistant}, and closing it takes a whole discipline:
+      \vspace{0.3em}
+
+      \centering
+      SFT \textrightarrow{} preference optimisation \textrightarrow{}
+      RLVR \textrightarrow{} distillation
+
+      \vspace{0.3em}
+      \raggedright
+      Each stage exists because the previous one has a specific limitation.
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{block}{Tuesday 3 November}
+        \small
+        Post-training. Chat templates, loss masking, DPO, GRPO, and why being
+        able to \emph{check} an answer removed the need for a reward model.
+
+        \vspace{0.4em}
+        The base-versus-instruct demo will be pre-recorded, because Roihu is
+        down that day.
+      \end{block}
+      \vspace{0.3em}
+      \small
+      \textbf{This week}: begin Lab 1 and keep the outputs for your final
+      report. There is no intermediate submission.
+    \end{column}
+  \end{columns}
+  \note{Thirty seconds. End on the image of the rambling base model, because it
+  is the thing they will remember and it is the question Tuesday answers.
+
+  Remind them once more about the maintenance window, and then let them go on
+  time.}
+\end{frame}
+
+\appendix
+
+\begin{frame}[shrink=18]{Reading}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{Core}
+      \begin{itemize}\small
+        \item Stanford CS336, \textit{Language Modeling from Scratch}, the
+          lectures on data and on systems
+        \item Hugging Face, \textit{The Smol Training Playbook}, 2025
+        \item Karpathy, \textit{nanoGPT}
+      \end{itemize}
+      \vspace{0.4em}
+      \textbf{Data}
+      \begin{itemize}\small
+        \item Penedo et al., \textit{The FineWeb Datasets}, 2024
+        \item Lozhkov et al., \textit{FineWeb-Edu}, 2024
+        \item Soldaini et al., \textit{Dolma}, 2024
+        \item Luukkonen et al., \textit{Poro 34B and the Blessing of
+          Multilinguality}, 2024
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \textbf{Scaling}
+      \begin{itemize}\small
+        \item Kaplan et al.\ 2020; Hoffmann et al.\ 2022 (Chinchilla)
+        \item Muennighoff et al., \textit{Scaling Data-Constrained Language
+          Models}, 2023
+        \item Schaeffer et al., \textit{Are Emergent Abilities a Mirage?}, 2023
+      \end{itemize}
+      \vspace{0.4em}
+      \textbf{Systems}
+      \begin{itemize}\small
+        \item Rajbhandari et al., \textit{ZeRO}, 2020
+        \item Shoeybi et al., \textit{Megatron-LM}, 2019
+        \item Grattafiori et al., \textit{The Llama 3 Herd of Models}, 2024;
+          read section 3 on infrastructure
+        \item DeepSeek-AI, \textit{DeepSeek-V3 Technical Report}, 2024, for fp8
+          training in detail
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \vspace{0.3em}
+  \small
+  For current developments, Raschka's \textit{Ahead of AI}:
+  \textit{A Dream of Spring for Open-Weight LLMs} (Feb 2026) and
+  \textit{The State of LLMs} (2025).
+  \note{If they read one thing, make it section 3 of the Llama 3 paper. It is
+  the most honest published account of what large-scale training actually
+  involves, and it is readable.
+
+  The Smol Training Playbook is the best practical companion to this lecture
+  for anyone who wants to train something real at a scale a university can
+  afford.}
+\end{frame}
+
+
+\end{document}

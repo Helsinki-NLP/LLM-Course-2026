@@ -1,0 +1,4 @@
+Die Studierenden vergleichen mehrere Tokenizer mit denselben Sätzen.
+Sprachmodelle lernen statistische Muster aus großen Textsammlungen.
+Sorgfältige Experimente verwenden dieselben Daten und dasselbe Trainingsbudget.
+Der Abschlussbericht erklärt sowohl die Methode als auch die Ergebnisse.

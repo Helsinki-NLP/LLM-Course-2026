@@ -1,0 +1,6 @@
+{"id":"dev-001","premise":"A runner crosses the finish line.","hypothesis":"An athlete finishes a race.","label":"entailment"}
+{"id":"dev-002","premise":"A teacher writes an equation on a board.","hypothesis":"The class might be studying physics.","label":"neutral"}
+{"id":"dev-003","premise":"The theater has no audience.","hypothesis":"People are watching a play in the theater.","label":"contradiction"}
+{"id":"dev-004","premise":"A gardener waters yellow flowers.","hypothesis":"A person cares for plants.","label":"entailment"}
+{"id":"dev-005","premise":"A suitcase stands by the front door.","hypothesis":"Its owner will travel abroad.","label":"neutral"}
+{"id":"dev-006","premise":"All lights in the office are off.","hypothesis":"A desk lamp is not off.","label":"contradiction"}

@@ -1,0 +1,10 @@
+{
+  "configuration": "mock-fp8",
+  "server": "bundled deterministic mock",
+  "model": "task",
+  "model_revision": "mock-v1",
+  "adapter_revision": "none",
+  "precision": "fp8",
+  "port": 8765,
+  "seed": 20261112
+}

@@ -1,0 +1,22 @@
+{
+  "configuration": "fp8",
+  "model": "Qwen/Qwen3.5-4B-Instruct",
+  "model_revision": "main",
+  "tokenizer_revision": "main",
+  "served_model_name": "task",
+  "base_served_model_name": "base",
+  "adapter": {
+    "name": "task",
+    "path": null,
+    "revision": "none"
+  },
+  "dtype": "auto",
+  "quantization": "fp8",
+  "max_model_len": 4096,
+  "gpu_memory_utilization": 0.85,
+  "port": 8000,
+  "extra_args": [
+    "--no-enable-prefix-caching"
+  ],
+  "notes": "This changes weight/activation quantization only. Keep KV-cache dtype unchanged. Pin revisions and use the same adapter and limits as bf16."
+}

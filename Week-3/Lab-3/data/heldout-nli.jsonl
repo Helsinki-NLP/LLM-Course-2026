@@ -1,0 +1,12 @@
+{"id":"nli-001","premise":"A child is playing a violin on stage.","hypothesis":"A young person is making music.","label":"entailment"}
+{"id":"nli-002","premise":"The library is open until eight tonight.","hypothesis":"The library closed at noon.","label":"contradiction"}
+{"id":"nli-003","premise":"Mira left her bicycle beside the station.","hypothesis":"Mira took a train to Turku.","label":"neutral"}
+{"id":"nli-004","premise":"Every red folder is stored in the top drawer.","hypothesis":"The red budget folder is in the top drawer.","label":"entailment"}
+{"id":"nli-005","premise":"No buses run on this road on Sundays.","hypothesis":"A bus uses this road every Sunday.","label":"contradiction"}
+{"id":"nli-006","premise":"The researcher published a paper about Finnish morphology.","hypothesis":"The paper won an international prize.","label":"neutral"}
+{"id":"nli-007","premise":"Kari bought three pears and two apples.","hypothesis":"Kari bought some fruit.","label":"entailment"}
+{"id":"nli-008","premise":"The meeting starts after lunch.","hypothesis":"The meeting starts before breakfast.","label":"contradiction"}
+{"id":"nli-009","premise":"Snow covered the path through the forest.","hypothesis":"The temperature was below minus ten degrees.","label":"neutral"}
+{"id":"nli-010","premise":"Both submitted programs passed all tests.","hypothesis":"At least one submitted program passed all tests.","label":"entailment"}
+{"id":"nli-011","premise":"Leena has never visited Sweden.","hypothesis":"Leena visited Stockholm last summer.","label":"contradiction"}
+{"id":"nli-012","premise":"The café serves oat milk with coffee.","hypothesis":"The café grows its own oats.","label":"neutral"}

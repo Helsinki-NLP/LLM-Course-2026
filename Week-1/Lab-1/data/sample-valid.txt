@@ -1,0 +1,4 @@
+Mallin laatua arvioidaan aineistolla, jota ei käytetty painojen päivittämiseen.
+Sama tokenisoija on käytettävä sekä opetuksessa että tekstin tuottamisessa.
+Pienen kokeen tehtävä on tarkistaa menetelmä ennen kallista ajoa.
+Toistettava koe sisältää koodin, asetukset, tulokset ja satunnaissiementen arvot.

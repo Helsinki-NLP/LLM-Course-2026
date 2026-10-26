@@ -1,0 +1,944 @@
+% =====================================================================
+%  LDA-T318 — Lab 3 briefing — Serve and measure
+%  Thursday 12 November 2026
+%  Build:  latexmk -xelatex main.tex
+% =====================================================================
+\documentclass[aspectratio=169,10pt]{beamer}
+
+% Path has no parent-directory step: Overleaf resolves \input from the project root and
+% will not read above it. Locally, the Makefile puts common/ on TEXINPUTS.
+\input{preamble.tex}
+
+\renewcommand{\lecturename}{Lab 3 — Serve and measure}
+\renewcommand{\lecturedate}{12 November 2026}
+
+\title{Lab 3: Serve and measure}
+\subtitle{Measuring what your model costs to run}
+\author{Aarne Talman}
+\institute{\coursecode\ \textbar\ \coursename\ \textbar\ \courseinstitution}
+\date{12 November 2026}
+
+\begin{document}
+
+% =====================================================================
+\begin{frame}[plain,shrink=8]
+  \titlepage
+  \note{Fifteen minutes of briefing, then the room works and I circulate.
+  Say that out loud in the first thirty seconds so nobody settles in for a
+  lecture.
+
+  The frame to hold: on Tuesday we did the theory of serving, and today every
+  number on those slides becomes a number they measured themselves on their
+  own model. Nothing gets trained today; the session is all measurement.
+
+  Target: briefing done by minute 10, every server in the room answering
+  requests by minute 15.}
+\end{frame}
+
+\coursemapframe{3}
+
+% =====================================================================
+\section{The question}
+% =====================================================================
+
+\begin{frame}{The question today}
+  Today you put a language model behind a server and measure what it costs to
+  run. You may use the adapter from Lab 2 or another compatible model.
+  \vspace{0.4em}
+
+  \begin{block}{Today}
+    \textbf{What does it cost to run, and what do you give up to make it
+    cheaper?}
+  \end{block}
+  \vspace{0.4em}
+
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{You will produce}
+      \begin{itemize}
+        \item one \key{speed-versus-quality table}
+        \item a \key{deployment recommendation}, 3--5 sentences
+        \item a \key{one-command restart script} you can reuse in later labs
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \textbf{You will not}
+      \begin{itemize}
+        \item train anything
+        \item change your prompt
+        \item change your held-out set
+      \end{itemize}
+      \vspace{0.3em}
+      Every number today is a measurement on a model you already have.
+    \end{column}
+  \end{columns}
+  \vfill
+  \small In your final report, the deployment recommendation must be supported
+  by the table. Start with \texttt{lab3-example/README.md}.
+  \note{Thirty seconds. The sentence to land: cost and quality are a single
+  trade-off, and today they finally sit in the same table.
+
+  Explain what a useful recommendation includes: which configuration to
+  deploy, under what latency target, what would change at ten times the
+  traffic, and what FP8 cost in quality. Three to five sentences, backed by
+  the rows of the table.
+
+  While circulating: the students who finish early are the ones who skipped the
+  warm-up. Check their numbers before you let them write the recommendation.}
+\end{frame}
+
+\begin{frame}{Material for the final report}
+  \centering
+  \scriptsize
+  \begin{tabular}{@{}L{2.3cm} C{1.5cm} C{1.5cm} C{1.9cm} C{1.2cm} C{1.2cm}@{}}
+    \toprule
+    \textbf{Configuration} & \textbf{TTFT ms, p50 / p95} & \textbf{TPOT ms, p50 / p95} &
+    \textbf{Output tok/s @ 1 / 8 / 32} & \textbf{Task score} & \textbf{Invalid \%}\\
+    \midrule
+    bf16 + LoRA adapter & \color{UHGrey}-- & \color{UHGrey}-- & \color{UHGrey}-- &
+      \color{UHGrey}-- & \color{UHGrey}--\\[0.3em]
+    FP8 + LoRA adapter & \color{UHGrey}-- & \color{UHGrey}-- & \color{UHGrey}-- &
+      \color{UHGrey}-- & \color{UHGrey}--\\[0.3em]
+    bf16 + JSON schema & \color{UHGrey}-- & \color{UHGrey}-- & \color{UHGrey}-- &
+      \color{UHGrey}-- & \color{UHGrey}--\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.6em}
+  \raggedright\scriptsize
+  \textbf{TTFT}: how long until the \emph{first} token appears.
+  \textbf{TPOT}: milliseconds per token after that.
+  \textbf{p50 / p95}: the median request, and the slowest one in twenty.
+  \textbf{@ 1 / 8 / 32}: with that many requests in flight at the same instant.
+  \textbf{Invalid \%}: outputs your parser could not use.
+  \vspace{0.4em}
+
+  \small
+  Same model, same adapter, same held-out set, same prompts, same decoding
+  parameters in every row. \key{One variable changes per row.}
+  Task score comes from the \textbf{same held-out scorer used in week 2},
+  unchanged.
+  \note{Put this on the screen and leave it there while you talk. It is the
+  shape of the whole session: three rows, and each block of the timeline fills
+  one of them. The three definitions along the bottom are first use, so read
+  them out; the whole second half of the briefing assumes them. Say that
+  ``number of requests behind every latency cell'' is not optional. A
+  percentile computed from five requests tells you nothing.
+
+  Say explicitly that the third row only needs the invalid-output and score
+  columns if time is short; speed under constrained decoding is a bonus.
+
+  The mistake to watch for while circulating: students who change two things
+  between rows, typically precision and max-model-len, because the FP8 server
+  would not start at the old setting. Then the comparison is worthless. Tell
+  them to go back and re-run the bf16 row at the new setting instead.}
+\end{frame}
+
+\begin{frame}{Ninety minutes}
+  \centering
+  \vspace{0.6em}
+  \begin{tikzpicture}[xscale=0.122]
+    % --- blocks -----------------------------------------------------
+    \fill[UHOrange!15] (0,0)  rectangle (10,1.1);
+    \draw[UHOrange]    (0,0)  rectangle (10,1.1);
+    \node[font=\tiny, align=center, text width=1.0cm] at (5,0.55)
+      {start the server};
+
+    \fill[UHLight] (10,0) rectangle (35,1.1);
+    \draw[UHBlue]  (10,0) rectangle (35,1.1);
+    \node[font=\scriptsize, align=center, text width=2.8cm] at (22.5,0.55)
+      {speed: TTFT, TPOT, throughput at 1 / 8 / 32};
+
+    \fill[UHLight] (35,0) rectangle (60,1.1);
+    \draw[UHBlue]  (35,0) rectangle (60,1.1);
+    \node[font=\scriptsize, align=center, text width=2.8cm] at (47.5,0.55)
+      {FP8: re-time and re-score};
+
+    \fill[UHLight] (60,0) rectangle (80,1.1);
+    \draw[UHBlue]  (60,0) rectangle (80,1.1);
+    \node[font=\scriptsize, align=center, text width=2.2cm] at (70,0.55)
+      {JSON schema: invalid-output rate};
+
+    \fill[UHGreen!12] (80,0) rectangle (90,1.1);
+    \draw[UHGreen]    (80,0) rectangle (90,1.1);
+    \node[font=\tiny, align=center, text width=1.0cm] at (85,0.55)
+      {save and write up};
+
+    % --- axis -------------------------------------------------------
+    \draw[UHGrey] (0,-0.1) -- (90,-0.1);
+    \foreach \x in {0,10,35,60,80,90} {
+      \draw[UHGrey] (\x,0) -- (\x,-0.25);
+      \node[font=\tiny, text=UHGrey] at (\x,-0.5) {\x};
+    }
+    \node[font=\tiny, text=UHGrey, anchor=west] at (91,-0.5) {min};
+  \end{tikzpicture}
+  \vspace{0.9em}
+
+  \raggedright\small
+  If the server is not up by \textbf{minute 15}, stop debugging alone and put
+  your hand up. Everything after that block depends on it.
+  \note{Read the timeline out loud once. It is the only schedule they get and
+  it stays on the wall at the end of the deck.
+
+  The honest warning: the first block is the one that overruns. Weight
+  download, a stale kernel holding the GPU, a port already in use. That is why
+  the troubleshooting appendix exists. Know it well enough to diagnose from the
+  doorway.
+
+  Circulating plan: minutes 0--15 is triage, nothing else. Walk the room once
+  and look only at whether a server is answering. From minute 15 switch to
+  looking at measurement method.}
+\end{frame}
+
+% =====================================================================
+\section{Serving}
+% =====================================================================
+
+% Maintained commands and client code live in lab3-example.
+\iffalse
+\begin{frame}[fragile,shrink=12]{Start the server}
+\begin{lstlisting}[language=slurm]
+# Run this inside a gpuinteractive session (one GH200). NOT on a login node.
+module purge                       # start from an empty module environment
+module load python-vllm            # vLLM has its own module, loaded in week 3 only
+
+export HF_HOME=/scratch/project_2021893/hf  # shared weight cache
+
+vllm serve Qwen/Qwen3.5-4B-Instruct \
+  --served-model-name base \
+  --enable-lora \
+  --lora-modules task=/scratch/project_2021893/lora/w2-adapter \
+  --max-model-len 4096 \
+  --gpu-memory-utilization 0.85 \
+  --port 8000
+\end{lstlisting}
+  \vspace{0.2em}
+  \small
+  \textbf{Success looks like} the line \texttt{Application startup complete}
+  (it can take a few minutes the first time, while the weights download). Check
+  from a second terminal: \texttt{curl localhost:8000/v1/models} must list
+  \texttt{base} \emph{and} \texttt{task}.
+  \vspace{0.3em}
+
+  \scriptsize
+  \texttt{--lora-modules task=<path>} loads your week 2 adapter and names it
+  \texttt{task}; that name goes in every request. \quad
+  \texttt{--max-model-len} caps prompt plus answer, in tokens. \quad
+  \texttt{--gpu-memory-utilization} is a \key{reservation}: vLLM claims
+  85\,\% of the card up front, and whatever is left after the weights becomes
+  KV cache, the per-request memory that decides how many requests fit at once.
+  Tuesday's lecture was about that preallocation.
+  \note{Walk four lines only: the module, the adapter, max-model-len and
+  gpu-memory-utilization. Everything else they can read.
+
+  The adapter line is the one people get wrong. The name to the left of the
+  equals sign is what they will put in the model field of every request. Say it
+  now and say it again on the next slide.
+
+  The memory line connects straight to Tuesday: the weights are about 8 GB in
+  bf16, so the other seventy-odd gigabytes are KV cache, which is what caps
+  concurrency. If anyone asks why not 0.95: leave headroom for the eval script
+  and the notebook kernel.
+
+  Watch for: people serving the base model when their adapter was trained on
+  the instruct model. Ask them which checkpoint they fine-tuned.}
+\end{frame}
+
+\begin{frame}[fragile,shrink=15]{Call it from the notebook}
+\begin{lstlisting}[language=Python]
+from openai import OpenAI
+import time
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="EMPTY")  # key unused
+
+def one_request(prompt, n_out=128):
+    t0 = time.perf_counter()
+    stream = client.chat.completions.create(
+        model="task",                      # the adapter name, not the repo id
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.0, max_tokens=n_out, stream=True,
+        extra_body={"ignore_eos": True},   # exactly n_out tokens, always
+    )
+    ttft, n = None, 0
+    for chunk in stream:
+        if not chunk.choices[0].delta.content:
+            continue                       # skip the role-only first chunk
+        if ttft is None: ttft = time.perf_counter() - t0
+        n += 1
+    return ttft, (time.perf_counter() - t0 - ttft) / max(n - 1, 1)  # TTFT, TPOT
+\end{lstlisting}
+  \small
+  \key{You must stream} to measure TTFT at all. A non-streaming call hands you
+  the whole answer at once, so there is no ``first token'' to time.
+  \textbf{Success looks like} a TTFT of a few tens of milliseconds and a TPOT
+  well under it; if TTFT comes back equal to the total, streaming is off.
+  \note{This function is the whole measurement harness. Everything later today
+  is this function called in a loop, or called from several threads at once.
+
+  Two things to point at: model equals the adapter name, and stream equals
+  True. Without streaming there is no TTFT, and about a third of the room will
+  try to compute it from the total anyway. The content check inside the loop
+  matters too: the first chunk carries only the role, so counting it puts TTFT
+  one chunk too early.
+
+  Note the api-key placeholder. The server does not check it, but the OpenAI
+  client refuses to start without one. This is also exactly the client Dmitry's
+  labs will use in weeks 5 and 6.
+
+  Watch for: a notebook kernel still holding GPU memory from week 2, so the
+  server never started and every call raises a connection error. The fix is to
+  restart the kernel rather than the server.}
+\end{frame}
+
+% =====================================================================
+\section{Measuring}
+% =====================================================================
+
+\fi
+\begin{frame}{Measure honestly, 1: warm up, then fix the length}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \textbf{Before you time anything}
+      \begin{itemize}
+        \item send $\approx$ 20 throwaway requests and \key{discard them}
+        \item then start recording
+      \end{itemize}
+      \vspace{0.5em}
+      \textbf{Fix everything except the one variable}
+      \begin{itemize}
+        \item \texttt{max\_tokens=128} and \texttt{ignore\_eos=True}, so that
+          every request emits exactly 128 tokens
+        \item the same prompt set, in the same order
+        \item \texttt{temperature=0.0} everywhere
+      \end{itemize}
+      \vspace{0.4em}
+      Without a fixed output length you are measuring \emph{how verbose the
+      model is} rather than how fast the server is. FP8 changes verbosity.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{gotcha}[The first request is always slow]
+        One-off work all lands on request number one: the GPU compiles and
+        tunes its kernels, the weights are read in for real, and nothing is
+        cached yet.
+        \vspace{0.3em}
+        Without a warm-up you are measuring \textbf{startup}.
+      \end{gotcha}
+      \vspace{0.3em}
+      \small
+      The opposite trap: the server remembers the work done for a prompt it has
+      already seen (``prefix caching''), so the \emph{second} identical prompt
+      looks artificially fast. Vary your prompts, or serve with
+      \texttt{--no-enable-prefix-caching} while benchmarking.
+    \end{column}
+  \end{columns}
+  \note{Slow down here even if you are behind. More than any other slide, this
+  one decides whether their numbers mean anything, and you can cut the
+  determinism bonus to buy the time.
+
+  The one-off work on request one, named properly in case anyone asks: CUDA
+  graph capture, kernel autotuning, lazy weight loading, and an empty prefix
+  cache. The prefix cache is a block-level reuse of KV entries for a shared
+  prompt prefix, which is why a repeated prompt skips prefill entirely.
+
+  The sentence to repeat: a benchmark is a controlled experiment, and the
+  control is the output length. If FP8 answers in 90 tokens and bf16 in 130,
+  the end-to-end comparison is meaningless, and ignore-eos is the one-line fix.
+
+  While circulating this is mistake number one. Look over shoulders for a
+  timing loop whose first iteration is twenty times the others. If you see it,
+  ask: how long did your first request take compared with your tenth, and which
+  one are you reporting?}
+\end{frame}
+
+\begin{frame}[shrink=12]{Measure honestly, 2: TTFT, TPOT, concurrency}
+  \centering
+  \small
+  \begin{tabular}{@{}L{2.4cm} L{4.1cm} L{4.3cm}@{}}
+    \toprule
+    \textbf{Number} & \textbf{What it is} & \textbf{Whose experience}\\
+    \midrule
+    \textbf{TTFT} & waiting in the queue, then reading your prompt, until the
+      first token leaves & the user staring at a blank box\\
+    \addlinespace[0.3em]
+    \textbf{TPOT} & milliseconds per token once it is going &
+      the user reading the answer as it streams\\
+    \addlinespace[0.3em]
+    \textbf{Throughput} & total output tokens/s across all requests at once &
+      nobody; it is the \emph{operator's} number\\
+    \bottomrule
+  \end{tabular}
+  \vspace{0.4em}
+
+  \raggedright
+  \emph{In words:} the user's total wait is the time to the first token, plus
+  the time per token times the number of tokens.
+  \vspace{0.3em}
+
+  \textbf{Sweep concurrency at 1 / 8 / 32}, meaning that many requests in
+  flight at the same instant. Expect throughput to rise while TPOT gets worse,
+  which is Tuesday's latency--throughput curve drawn with your own numbers.
+  \vspace{0.2em}
+
+  \small
+  \textbf{Sanity check at concurrency 1:} every token re-reads the whole model
+  out of GPU memory, so tokens/s cannot beat about 500/s for an 8\,GB model on
+  a GH200.
+  \source{Definitions and the roofline estimate as given in Tuesday's lecture, section 2; the latency--throughput curve, section 4.}
+  \note{Give them a feel for TPOT: 20\,ms per token is 50 tokens a second,
+  comfortably faster than anyone reads.
+
+  Say what the sweep is for. With one request you are measuring the model
+  itself; at 32, most of what you see is the scheduler coping.
+
+  The relations written symbolically, if anyone wants them on the board:
+  end-to-end latency $=$ TTFT $+$ TPOT $\times$ (output tokens), and perceived
+  per-user speed is $1/\mathrm{TPOT}$. The sanity check is the memory-bound
+  side of the roofline from Tuesday: at batch size one, decode reads every
+  weight per token, so tokens/s $\lesssim$ (memory bandwidth) $/$ (bytes of
+  weights). A GH200 has roughly 4\,TB/s of HBM; an 8\,GB bf16 model therefore
+  caps near 500 tokens/s, and anyone reporting more has either batched or
+  mis-measured.
+
+  Make them say which metric they would optimise for their own task. A Finnish
+  NER pipeline over a document archive cares only about throughput. For a chat
+  demo it is TTFT that matters. The recommendation at the end of the lab has to
+  name one.
+
+  Concurrency 32 is where the GH200 gets interesting, because the KV cache runs
+  out long before the weights become a problem. Connect that back to Tuesday in
+  one line and move on.
+
+  Watch for: people running the concurrency sweep sequentially in a for loop
+  and calling it concurrency 32. They need threads, or asyncio, or the vLLM
+  benchmark script. Ask them how many requests the server saw at the same
+  instant.}
+\end{frame}
+
+\begin{frame}{Measure honestly, 3: report the distribution}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      Record \key{one row per request}, not an average:
+      \vspace{0.3em}
+      \begin{itemize}
+        \item request id, concurrency level, configuration
+        \item TTFT, TPOT, output tokens, wall-clock start
+      \end{itemize}
+      \vspace{0.5em}
+      Then report \key{median (p50) and p95} for each cell of the table, from
+      \textbf{at least 50 requests}. State how many.
+      \vspace{0.5em}
+      The production version of this is \key{goodput}: requests per second that
+      meet a latency target you choose and state, say first token under
+      500\,ms \textbf{and} under 50\,ms per token after that.
+      \vspace{0.3em}
+      \small Those thresholds are only an example. Pick your own and justify
+      them from your task.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{gotcha}[The mean hides the tail users complain about]
+        A mean latency over a batch of requests is dominated by the many fast
+        ones, so it tells you nothing about the slow few.
+        \vspace{0.3em}
+        A server with a good mean and a terrible p95 still feels broken to use.
+      \end{gotcha}
+      \vspace{0.4em}
+      \small
+      Keep the raw per-request log in the repo. The report shows p50 and p95,
+      and the log is where anyone can check them.
+    \end{column}
+  \end{columns}
+  \note{Thirty seconds on the gotcha, and make it concrete: one request in
+  twenty taking four seconds is invisible in the mean, and it is what people
+  email you about.
+
+  This is also a reproducibility point for the rubric. The raw log is what lets
+  another student recompute their p95.
+
+  Watch for: a table with one number per cell and no sample size. Ask how many
+  requests that number came from. If the answer is ``one'', send them back to
+  the harness. Fifty is the floor because a p95 is literally the third-worst of
+  fifty; below that the statistic is noise.
+  By minute 35 the bf16 row should be complete.}
+\end{frame}
+
+% =====================================================================
+\section{Quality}
+% =====================================================================
+
+% The exact server command is maintained in lab3-example/scripts.
+\iffalse
+\begin{frame}[fragile]{FP8 on the GH200: one flag}
+\begin{lstlisting}[language=slurm]
+# Stop the bf16 server first (Ctrl-C). The port and the GPU memory are not shared.
+# --quantization fp8   store numbers in 8 bits instead of 16. Native on the GH200.
+# --kv-cache-dtype fp8 optional, and a SEPARATE experiment -- one change at a time
+
+vllm serve Qwen/Qwen3.5-4B-Instruct \
+  --served-model-name base \
+  --enable-lora \
+  --lora-modules task=/scratch/project_2021893/lora/w2-adapter \
+  --quantization fp8 \
+  --max-model-len 4096 \
+  --gpu-memory-utilization 0.85 \
+  --port 8000
+\end{lstlisting}
+  \vspace{0.2em}
+  \small
+  Then re-run the \emph{identical} timing cells. Do not edit the harness
+  between rows.
+  \vspace{0.3em}
+
+  What you should see, and should verify rather than assume: an 8\,GB bf16
+  model drops to about 4\,GB, the freed 4\,GB becomes KV cache, so concurrency
+  32 improves more than concurrency 1 does.
+  \source{FP8 is native on H100-class hardware (GH200); see Tuesday's lecture, section 5.
+  The direction is what you should expect. How big it turns out to be is your result.}
+  \note{FP8 is a one-flag change on this hardware, which is exactly why it is
+  the right experiment for a 90-minute lab. The format is E4M3 --- four
+  exponent bits, three mantissa bits --- applied to weights and activations;
+  the KV cache stays 16-bit unless they also pass \texttt{--kv-cache-dtype}.
+
+  The point to make about the expected result: decode is bandwidth-bound, so
+  halving the bytes read per token is the whole mechanism. Anybody who sees no
+  speed-up at concurrency 1 should check they are not prompt-bound with a
+  128-token output.
+
+  Say clearly: kv-cache-dtype fp8 is optional and is a separate experiment. If
+  they turn it on in the same run they have changed two things again.
+
+  Minute 35 to 60. If a student is still fighting the bf16 row at minute 45,
+  tell them to skip the concurrency sweep and get the FP8 row instead. Two
+  filled rows are worth more than three concurrency levels in one row.}
+\end{frame}
+
+\fi
+\begin{frame}[shrink=14]{Score the quantised model yourself}
+  \begin{columns}[T]
+    \begin{column}{0.54\textwidth}
+      Run the \key{same held-out scorer used in week 2} against the FP8
+      endpoint. It should take a model or a base URL and return the task score
+      in one call.
+      \vspace{0.4em}
+
+      Same held-out set, same prompts, same decoding parameters as the bf16
+      score. Otherwise you are comparing two different experiments.
+      \vspace{0.6em}
+
+      \textbf{Where quantisation damage actually shows up}
+      \begin{itemize}
+        \item long inputs
+        \item non-English text
+        \item long reasoning chains
+      \end{itemize}
+      \vspace{0.2em}
+      \small
+      Headline benchmarks are the \emph{last} place it appears, which is why a
+      published ``FP8 is lossless'' claim says nothing about your task.
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{block}{Report both halves}
+        \small
+        \textbf{Gained:} tokens/s, p95 latency, memory freed for KV cache,
+        concurrency reached.\\[0.4em]
+        \textbf{Paid:} score points on the held-out set.\\[0.4em]
+        If you report only one of these halves, you have written an advert.
+      \end{block}
+      \vspace{0.4em}
+      \small
+      Look at your \textbf{ten worst examples} under FP8, not only the
+      aggregate. If the aggregate moved by less than the noise of your metric,
+      say so.
+    \end{column}
+  \end{columns}
+  \source{Quality cost of quantisation as discussed in Tuesday's lecture, section 5.
+  The score change on your task is a measurement, not a citation.}
+  \note{This is the pedagogical centre of the second half. The transferable
+  habit is: when a vendor says a compression method is free, score it on your
+  own data, on your own hardware, with your own metric.
+
+  The non-English point lands with the Finnish projects in the room. Ask one of
+  the TyDi QA or Turku NER students to say their FP8 delta out loud when they
+  have it.
+
+  Watch for: students scoring FP8 on a different number of examples than they
+  scored bf16 on, usually because they truncated the set to save time. Either
+  truncate both or neither.}
+\end{frame}
+
+% The schema and request implementation are in lab3-example.
+\iffalse
+\begin{frame}[fragile,shrink=5]{Constrained output: a schema and a request}
+\begin{lstlisting}
+schema = {
+  "type": "object",
+  "properties": {
+    "label":      {"type": "string",
+                   "enum": ["entailment", "neutral", "contradiction"]},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+  },
+  "required": ["label", "confidence"],
+  "additionalProperties": False
+}
+
+r = client.chat.completions.create(
+    model="task",
+    messages=[{"role": "user", "content": prompt}],
+    temperature=0.0, max_tokens=64,
+    extra_body={"guided_json": schema},
+)
+\end{lstlisting}
+  \small
+  \emph{In words:} the server turns the schema into a rule about which tokens
+  may come next, and at each step it blocks the ones that would break it.
+  Nothing has to be cleaned up afterwards, because invalid JSON cannot be
+  produced in the first place.
+  \textbf{Success looks like} every output surviving \texttt{json.loads}.
+  \note{The mechanism properly: the schema is compiled to a finite-state
+  machine, and at every decoding step the logits of tokens that would leave the
+  accepting path are set to minus infinity before the softmax. That is why the
+  invalid rate goes to essentially zero rather than merely down.
+
+  Replace the enum with their own label set: NLI labels, NER types, an answer
+  span plus a confidence, whatever their task needs. The schema should be the
+  smallest thing that captures their output format.
+
+  Watch for: schemas with no enum and no required list, which constrain almost
+  nothing and then surprise the student when the invalid rate barely moves.
+  Also watch for max-tokens too small, which truncates valid JSON and shows up
+  as an invalid output.}
+\end{frame}
+
+\fi
+\begin{frame}{Measure the invalid-output rate, both ways}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \textbf{The protocol}
+      \begin{enumerate}
+        \item A fixed set of held-out prompts, asking for JSON in the prompt
+          text, \key{no} schema. Parse each output. Count failures.
+        \item The \emph{same} prompts with \texttt{guided\_json}. Count again.
+        \item Score \emph{content} in both runs with the same held-out scorer.
+      \end{enumerate}
+      \vspace{0.5em}
+      Invalid means: not parseable, or parseable but missing a required field,
+      or a label outside your enum. Say which definition you used.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Record two numbers}
+        \small
+        \textbf{Syntax:} invalid-output rate, with and without the schema.\\[0.4em]
+        \textbf{Content:} task score, with and without the schema.
+      \end{block}
+      \vspace{0.4em}
+      \small
+      Forcing valid syntax can cost content quality: the model gets pushed onto
+      token paths it would not have chosen. If your invalid rate goes to zero
+      and your task score drops two points, \textbf{that is the finding}, and
+      it belongs in the recommendation.
+      \vspace{0.3em}
+
+      Constrained decoding also costs a little speed. Time it if you have the
+      minutes; the score matters more.
+    \end{column}
+  \end{columns}
+  \note{Minute 60 to 80. By now the table has two full rows; this is the third.
+
+  The counter-intuitive bit is worth saying plainly: valid JSON with the wrong
+  label inside it is still a wrong answer. The students who find a
+  syntax-versus-content trade-off will have something genuinely interesting to
+  write about, so encourage them to report it rather than hide it.
+
+  Watch for: a baseline run with no instruction to produce JSON at all, which
+  makes the unconstrained invalid rate near 100 per cent and the comparison
+  trivial. The honest baseline is a good prompt asking for JSON.}
+\end{frame}
+
+\begin{frame}{Bonus: temperature 0, alone and in a crowd}
+  \begin{columns}[T]
+    \begin{column}{0.54\textwidth}
+      \textbf{The procedure}
+      \begin{enumerate}
+        \item Pick one prompt. \texttt{temperature=0}, \texttt{max\_tokens=256}.
+        \item Send it \key{alone} on an idle server. Save the output.
+        \item Send it again alone. Confirm it is identical.
+        \item Send the \emph{same} prompt as one of \key{64 concurrent}
+          requests. Save that output.
+        \item Diff against the solo output.
+        \item Repeat steps 4--5 twenty times. Report how many of the 20 differ.
+      \end{enumerate}
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{block}{Why it happens}
+        \small
+        In floating point, $(a+b)+c$ and $a+(b+c)$ can differ in the last bits,
+        and the GPU adds numbers up in a different order depending on how many
+        requests it is batching.
+        \vspace{0.3em}
+        So \emph{other people's requests} can change your scores, and
+        occasionally the words you get back.
+      \end{block}
+      \vspace{0.3em}
+      \small
+      The fix is called \key{batch invariance}. This is not GPU randomness and
+      it is not a seed problem; see Tuesday, section 8.
+      \vspace{0.3em}
+
+      One line in the report: what this means for reproducible evaluation.
+    \end{column}
+  \end{columns}
+  \note{This is the bonus, so it is the first thing to cut if the room is
+  behind. Say that when you introduce it, so nobody starts here.
+
+  Precisely: the reduction order inside the attention and matmul kernels
+  depends on batch shape and on the scheduler's split of work, so the logits
+  differ in the last bits; once an argmax flips, the two continuations diverge
+  completely. The fix is batch-invariant kernels rather than a seed.
+
+  The reason it is worth doing at all: they have spent three weeks reporting
+  scores to two decimal places, and this shows them that the third decimal
+  depends on who else was on the server. That reframing is the point.
+
+  If someone sees zero differences in twenty trials, that is a real result
+  worth a sentence: their outputs may be short, highly constrained, or the
+  divergence point is past 256 tokens. Ask them to try a longer generation.}
+\end{frame}
+
+% =====================================================================
+\section{Admin}
+% =====================================================================
+
+% The restart scripts are maintained in lab3-example/scripts.
+\iffalse
+\begin{frame}[fragile,shrink=5]{A server you can restart with one command}
+\begin{lstlisting}[language=slurm]
+#!/bin/bash
+# scripts/serve.sh --- must work from a cold start, on a clean shell
+set -euo pipefail                  # stop at the first error, not three steps later
+
+module purge                       # do not inherit whatever was loaded before
+module load python-vllm
+
+MODEL=${MODEL:-Qwen/Qwen3.5-4B-Instruct}   # ${X:-default}: use $X if set, else this
+ADAPTER=${ADAPTER:-$PWD/lora/w2-adapter}
+PORT=${PORT:-8000}
+
+vllm serve "$MODEL" \
+  --served-model-name base \
+  --enable-lora --lora-modules task="$ADAPTER" \
+  --max-model-len 4096 \
+  --gpu-memory-utilization 0.85 \
+  --port "$PORT" "$@"              # "$@" passes any extra flags straight through
+\end{lstlisting}
+  \small
+  \key{Test it properly:} kill your server, open a \emph{fresh} terminal, run
+  \texttt{bash scripts/serve.sh}, and confirm that
+  \texttt{curl localhost:8000/v1/models} lists \texttt{base} and
+  \texttt{task}. No manual steps first, nothing recalled from your history.
+  \note{Be firm about this one. In week 5 Dmitry's RAG lab uses this endpoint
+  as its generator, and in week 6 the agent calls it. A script that only works
+  because of something the student typed earlier will cost them a lab.
+
+  The cold-start test is the whole instruction: a fresh terminal, no exports,
+  and no accidental \texttt{cd} into the right directory. It is ninety seconds
+  of work.
+
+  Also tell them to put the base URL and the model names in the repo README.
+  Dmitry's notebooks will ask for them.}
+\end{frame}
+
+\fi
+\begin{frame}{Files and results to keep}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \textbf{In the repo}
+      \begin{itemize}
+        \item \texttt{results/speed-quality.csv}, the table with one row per
+          configuration
+        \item \texttt{results/requests.csv}, the raw per-request log
+        \item \texttt{scripts/serve.sh}, tested from a cold start
+        \item the notebook with the timing harness
+        \item a \texttt{README} giving the base URL, port, model and adapter
+          names
+      \end{itemize}
+      \vspace{0.5em}
+      \textbf{In the report, section 4}\\
+      The table, and 3--5 sentences of recommendation.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{The recommendation must answer}
+        \small
+        Which configuration would you deploy, and under what latency target?\\[0.3em]
+        What did FP8 cost you, in score points?\\[0.3em]
+        What would you change at ten times the traffic?
+      \end{block}
+      \vspace{0.4em}
+      \small
+      There is no intermediate submission. Keep these files for the final
+      repository and reuse the endpoint in later labs if it suits your project.
+      \vspace{0.3em}
+
+      Rubric reminder: Results 30\,\%, Analysis 30\,\%. The table counts as
+      Results and the recommendation as Analysis.
+    \end{column}
+  \end{columns}
+  \note{Two minutes at most, and it can be the last thing you say before
+  releasing the room if you are short of time.
+
+  The three questions in the block are deliberately the same three questions a
+  colleague would ask in a code review. Students who can answer them have
+  understood the lab.
+
+  Emphasise that saving an exact server command makes later experiments much
+  easier to reproduce.}
+\end{frame}
+
+\begin{frame}{GPU etiquette}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \begin{itemize}
+        \item \key{Never serve from a login node.} No GPU there, and the CPUs
+          are shared by everyone on Roihu.
+        \item \texttt{gputest} (15 min) before \texttt{gpumedium} (36 h) for
+          anything you submit as a batch job.
+        \item A \texttt{gpuinteractive} session holds a whole GH200 for up to
+          12 hours. \key{Close it when you leave today}, from the Roihu web
+          interface rather than by closing the browser tab.
+        \item Stop your vLLM server before you stop the session, so the port
+          and the memory are released cleanly.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Why it matters more this week}
+        \small
+        We share one course project allocation, and \textbf{weeks 5 and 6 need
+        this endpoint again}. Every forgotten session today is GPU time missing
+        from Dmitry's labs.
+      \end{block}
+      \vspace{0.5em}
+      \small
+      Your server dies with the allocation. That is expected, and it is why
+      \texttt{serve.sh} has to work from a cold start.
+      \vspace{0.3em}
+
+      \texttt{squeue --me} to see what you are holding.
+      \texttt{scancel <jobid>} to let it go.
+    \end{column}
+  \end{columns}
+  \note{Short and firm, thirty seconds. The line that changes behaviour is the
+  connection to weeks 5 and 6: the GPU time wasted today is their own compute
+  later in the term.
+
+  At the end of the session, before people drift off, walk the room once and
+  ask each table whether their session is closed. Do it out loud so the rest of
+  the room hears.
+
+  Mention that we can all see each other's jobs in the queue. That tends to be
+  more effective than the policy itself.}
+\end{frame}
+
+\begin{frame}{On the wall for the rest of the session}
+  \begin{columns}[T]
+    \begin{column}{0.45\textwidth}
+      \textbf{Timeline}
+      \vspace{0.2em}
+
+      \small
+      \begin{tabular}{@{}r L{3.4cm}@{}}
+        \toprule
+        \textbf{min} & \\
+        \midrule
+        0--10  & server up, adapter visible\\
+        10--35 & speed: 1 / 8 / 32\\
+        35--60 & FP8: re-time, re-score\\
+        60--80 & JSON schema: invalid rate\\
+        80--90 & save results and write up\\
+        \bottomrule
+      \end{tabular}
+      \vspace{0.6em}
+
+      \footnotesize
+      Server not up by minute 15? Hand up.\\
+      Bonus (determinism) only if rows 1--3 are done.
+    \end{column}
+    \begin{column}{0.55\textwidth}
+      \textbf{Done when}
+      \vspace{0.2em}
+
+      \small
+      \texttt{[\,]}\ server answers on \texttt{:8000}, model \texttt{task}\\
+      \texttt{[\,]}\ warm-up requests discarded\\
+      \texttt{[\,]}\ p50 \emph{and} p95 for TTFT and TPOT, at 1 / 8 / 32\\
+      \texttt{[\,]}\ number of requests recorded for every cell\\
+      \texttt{[\,]}\ FP8 row: timed \emph{and} scored\\
+      \texttt{[\,]}\ invalid-output rate, with and without schema\\
+      \texttt{[\,]}\ \texttt{results/speed-quality.csv} saved\\
+      \texttt{[\,]}\ \texttt{scripts/serve.sh} tested from a clean shell\\
+      \texttt{[\,]}\ 3--5 sentence deployment recommendation\\
+      \texttt{[\,]}\ GPU session closed
+      \vspace{0.5em}
+
+      \footnotesize Keep these outputs for the final report and repository.
+    \end{column}
+  \end{columns}
+  \note{This slide stays projected for the whole working part of the session.
+  Do not advance past it. It is the operating manual: students will look up at
+  it instead of asking where they should be.
+
+  Say one sentence when you put it up --- ``this is on the wall, check yourself
+  against it'' --- then stop talking and start circulating. The briefing ends
+  here, at minute 10 to 15.
+
+  Use the checklist as your own circulating script too. Walking up to a table
+  and asking ``which of these ten is your next one'' is a better opening than
+  ``how is it going'', and it surfaces the stuck students faster.}
+\end{frame}
+
+\appendix
+
+\begin{frame}{When it breaks}
+  \scriptsize
+  \begin{tabular}{@{}L{3.4cm} L{7.6cm}@{}}
+    \toprule
+    \textbf{Symptom} & \textbf{First thing to try}\\
+    \midrule
+    OOM when the server starts &
+      Something else holds the GPU, usually a week 2 notebook kernel.
+      Restart the kernel, then run \texttt{nvidia-smi}, which lists what is
+      holding the card. Then lower \texttt{--gpu-memory-utilization} to 0.7 and
+      \texttt{--max-model-len} to 2048.\\
+    \addlinespace[0.3em]
+    \texttt{Address already in use} &
+      Your previous server is still running. \texttt{pkill -f "vllm serve"}, or
+      use \texttt{--port 8001} and change the base URL to match.\\
+    \addlinespace[0.3em]
+    404, or the adapter has no effect &
+      \texttt{model=} must be the name on the \emph{left} of
+      \texttt{--lora-modules name=path}, not the repo id. Check
+      \texttt{--enable-lora} is present and the path contains
+      \texttt{adapter\_config.json}.\\
+    \addlinespace[0.3em]
+    Fluent nonsense, normal latency &
+      Tokenizer or chat-template mismatch: the adapter was trained on the
+      instruct model and you are serving the base one, or the reverse. Serve
+      the checkpoint you fine-tuned.\\
+    \addlinespace[0.3em]
+    Server dies when the allocation ends &
+      Expected: the server is a child of your
+      \texttt{gpuinteractive} session. Start a new session and run
+      \texttt{bash scripts/serve.sh}.\\
+    \bottomrule
+  \end{tabular}
+  \note{Keep this slide one key-press away all session. Five symptoms cover
+  almost everything that goes wrong in this lab.
+
+  The fourth row is the subtle one and the easiest to miss over a shoulder,
+  because the latency numbers look perfectly healthy. If a student's speed
+  table is fine but their score collapsed against the bf16 baseline, check the
+  template before anything else.
+
+  The fifth row is worth announcing to the whole room once, around minute 70,
+  because the reservation window ends and several servers will die at the same
+  time. It also makes the argument for the restart script for you.}
+\end{frame}
+
+\end{document}

@@ -1,0 +1,22 @@
+{
+  "configuration": "bf16",
+  "model": "Qwen/Qwen3.5-4B-Instruct",
+  "model_revision": "main",
+  "tokenizer_revision": "main",
+  "served_model_name": "task",
+  "base_served_model_name": "base",
+  "adapter": {
+    "name": "task",
+    "path": null,
+    "revision": "none"
+  },
+  "dtype": "bfloat16",
+  "quantization": null,
+  "max_model_len": 4096,
+  "gpu_memory_utilization": 0.85,
+  "port": 8000,
+  "extra_args": [
+    "--no-enable-prefix-caching"
+  ],
+  "notes": "Set adapter.path to the Lab 2 adapter directory if reusing it. Pin model_revision and tokenizer_revision to commit hashes for final measurements."
+}

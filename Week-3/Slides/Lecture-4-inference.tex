@@ -1,0 +1,3036 @@
+% =====================================================================
+%  LDA-T318 — Lecture 4 — Inference
+%  Tuesday 10 November 2026, 16:15–17:45
+%  Build:  latexmk -xelatex main.tex
+% =====================================================================
+\documentclass[aspectratio=169,10pt]{beamer}
+
+% Path has no parent-directory step: Overleaf resolves \input from the project root and
+% will not read above it. Locally, the Makefile puts common/ on TEXINPUTS.
+\input{preamble.tex}
+
+\renewcommand{\lecturename}{Lecture 4 — Inference}
+\renewcommand{\lecturedate}{10 November 2026}
+
+\title{Inference}
+\subtitle{Lecture 4: what it costs to run a language model}
+\author{Aarne Talman}
+\institute{\coursecode\ \textbar\ \coursename\ \textbar\ \courseinstitution}
+\date{10 November 2026}
+
+\begin{document}
+
+% =====================================================================
+\begin{frame}[plain,shrink=8]
+  \titlepage
+  \note{Set the frame in the first minute. Weeks 1 and 2 were about where the
+  weights come from and how to shape their behaviour. Today's question is what
+  the finished model costs to run, every hour, for as long as it is deployed.
+
+  The one sentence for the whole lecture: you pay the training cost once and
+  the inference cost every hour after that. The technical reason it all hangs
+  together is that decoding is memory-bandwidth bound, so almost every serving
+  trick is a way to move fewer bytes per generated token, or to spread the
+  bytes you do move across more users.
+
+  Thursday they serve their own model and measure it. Several numbers on these
+  slides are estimates they will check against a stopwatch in 48 hours. Tell
+  them that, because it changes how they listen.}
+\end{frame}
+
+\coursemapframe{3}
+
+\begin{frame}{Lecture overview}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \begin{enumerate}
+        \item Decoding \hfill \textit{10 min}
+        \item Prefill vs decode \hfill \textit{10 min}
+        \item The KV cache \hfill \textit{15 min}
+        \item Continuous batching \hfill \textit{10 min}
+      \end{enumerate}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{enumerate}
+        \setcounter{enumi}{4}
+        \item Quantisation for inference \hfill \textit{10 min}
+        \item Speculative and constrained decoding \hfill \textit{10 min}
+        \item Serving systems and cost \hfill \textit{15 min}
+        \item Lab 3: measuring a server fairly \hfill \textit{10 min}
+      \end{enumerate}
+    \end{column}
+  \end{columns}
+  \vfill
+  \begin{takeaway}
+    By the end of today you should be able to explain where inference time and
+    memory go, estimate a model's serving capacity, and design a fair
+    speed--quality comparison.
+  \end{takeaway}
+  \note{Read the timings out loud as in every lecture. Eight sections is a lot,
+  so the signposting matters more than usual today.
+
+  The takeaway box is the promise. Come back to it at 17:43. Note that it is a
+  promise about \emph{paper} estimates. The measurement happens on Thursday,
+  and the gap between the two is the most educational part of the lab.}
+\end{frame}
+
+% =====================================================================
+\section{Decoding}
+% =====================================================================
+
+\begin{frame}{From logits to a token}
+  Every generated token goes through the same short pipeline. All of it
+  happens \emph{after} the forward pass, on a vector of
+  $|V| \approx 150{,}000$ numbers.
+  \vspace{0.6em}
+  \centering
+  \begin{tikzpicture}[node distance=5mm]
+    \node[modmute] (lg) {logits\\{\tiny $z \in \mathbb{R}^{|V|}$}};
+    \node[mod, right=of lg] (pen) {penalties\\{\tiny repetition, presence}};
+    \node[modhi, right=of pen] (tmp) {temperature\\{\tiny $z/T$}};
+    \node[modhi, right=of tmp] (trn) {truncation\\{\tiny top-$k$, top-$p$, min-$p$}};
+    \node[mod, right=of trn] (sm) {softmax\\{\tiny $\to$ probabilities}};
+    \node[modmute, below=8mm of sm] (dr) {draw one token};
+    \draw[flow] (lg) -- (pen);
+    \draw[flow] (pen) -- (tmp);
+    \draw[flow] (tmp) -- (trn);
+    \draw[flow] (trn) -- (sm);
+    \draw[flow] (sm) -- (dr);
+  \end{tikzpicture}
+
+  \vspace{0.6em}
+  \raggedright
+  Two things worth noticing now:
+  \begin{itemize}
+    \item it is \key{cheap}: a few operations over one vector, next to
+      billions of FLOPs in the forward pass;
+    \item it is \key{not part of the model}. The same weights behave very
+      differently under different settings, and those settings live in
+      \texttt{generation\_config.json}, in your client call, or in your
+      server's defaults.
+  \end{itemize}
+  \note{Clock check: should be about 16:18 when this goes up.
+
+  The ordering matters and people get it wrong: penalties and temperature act
+  on \emph{logits}; truncation acts on the sorted distribution. Divide by $T$
+  before truncating, and top-$p$ sees a different distribution than if you
+  truncate first. Implementations differ, which is one small reason two
+  libraries disagree at the same nominal settings.
+
+  The second bullet is the one to land. Three of the five boxes sit outside the
+  \texttt{.safetensors} file, which is the same point as the ``what a model
+  actually is'' slide in week 1.}
+\end{frame}
+
+\begin{frame}{Temperature and truncation change one distribution}
+  \centering
+  \begin{tikzpicture}
+    \pgfplotsset{every axis/.append style={
+      scale only axis, width=2.0cm, height=2.1cm,
+      ybar, bar width=2.6pt,
+      xmin=0.4, xmax=5.6, ymin=0, ymax=1.05,
+      ytick={0,0.5,1}, xtick={1,2,3,4,5},
+      xticklabels={a,b,c,d,e},
+      tick label style={font=\tiny},
+      title style={font=\tiny, yshift=-0.5mm},
+      axis x line*=bottom, axis y line*=left,
+    }}
+    \begin{axis}[name=g0, title={raw $p$}]
+      \addplot[fill=UHGrey!30, draw=UHGrey] coordinates
+        {(1,0.40)(2,0.25)(3,0.18)(4,0.10)(5,0.07)};
+    \end{axis}
+    \begin{axis}[name=g1, at={($(g0.east)+(7mm,0)$)}, anchor=west,
+                 title={greedy}]
+      \addplot[fill=UHBlue!45, draw=UHBlue] coordinates
+        {(1,1.00)(2,0)(3,0)(4,0)(5,0)};
+    \end{axis}
+    \begin{axis}[name=g2, at={($(g1.east)+(7mm,0)$)}, anchor=west,
+                 title={temp 1.5}]
+      \addplot[fill=UHBlue!45, draw=UHBlue] coordinates
+        {(1,0.33)(2,0.24)(3,0.19)(4,0.13)(5,0.10)};
+    \end{axis}
+    \begin{axis}[name=g3, at={($(g2.east)+(7mm,0)$)}, anchor=west,
+                 title={top-$k$, 2}]
+      \addplot[fill=UHBlue!45, draw=UHBlue] coordinates
+        {(1,0.62)(2,0.38)(3,0)(4,0)(5,0)};
+    \end{axis}
+    \begin{axis}[name=g4, at={($(g3.east)+(7mm,0)$)}, anchor=west,
+                 title={top-$p$, 0.8}]
+      \addplot[fill=UHBlue!45, draw=UHBlue] coordinates
+        {(1,0.48)(2,0.30)(3,0.22)(4,0)(5,0)};
+    \end{axis}
+  \end{tikzpicture}
+
+  \vspace{0.3em}
+  \raggedright\footnotesize
+  \begin{tabular}{@{}L{2.4cm} L{9.0cm}@{}}
+    \textbf{greedy} & take the most likely token.\\
+    \textbf{temperature} & values below 1 sharpen the distribution; values above 1 flatten it.\\
+    \textbf{top-$k$} & keep a fixed number of likely tokens, then renormalise.\\
+    \textbf{top-$p$} & keep the smallest set whose probabilities add up to $p$; the set adapts to confidence.\\
+  \end{tabular}
+  \note{Walk left to right across the little plots; they are all the same five
+  candidate tokens. The two that matter conceptually are top-$p$ and min-$p$,
+  because both are \emph{adaptive}: the number of surviving tokens depends on
+  how confident the model is, which is what you want.
+
+  Symbolic forms, if anyone wants them on the board: greedy is $\arg\max_i z_i$,
+  the limit of $T\to 0$; temperature is the map $z \mapsto z/T$; top-$p$ keeps
+  the smallest prefix of the sorted distribution with $\sum p \ge p$; min-$p$
+  keeps $\{i : p_i \ge \alpha\, p_{\max}\}$ with $\alpha$ typically 0.05--0.2.
+
+  If anyone asks about min-$p$, typical-$p$, eta or epsilon sampling, or DRY:
+  they are all real, but outside today's overview.}
+\end{frame}
+
+\begin{frame}{Which sampler for which task}
+  \centering
+  \small
+  \begin{tabular}{@{}L{3.3cm} L{3.4cm} L{4.6cm}@{}}
+    \toprule
+    \textbf{Task} & \textbf{Sensible default} & \textbf{Why}\\
+    \midrule
+    Classification, extraction, exact-match QA &
+      temperature 0 (greedy) &
+      there is one right answer, so variance only costs you\\[0.3em]
+    Code, maths, anything verified &
+      temperature 0 for one shot; about 0.8 if you sample several and vote &
+      diversity only pays when you have a verifier to pick the winner\\[0.3em]
+    Open generation, dialogue, summarisation &
+      temperature 0.7, with top-$p$ 0.9 or min-$p$ 0.05 &
+      greedy output is repetitive and flat, and a human is judging\\[0.3em]
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.5em}
+  \raggedright
+  \key{Sample widely only when a human or an automatic checker can reject poor
+  outputs.} Otherwise sampling adds variance without a way to select the
+  better result.
+  \source{Raschka, \textit{Build Your Own Reasoning Model}, Oct 2026,
+    on best-of-$n$ and self-consistency.}
+  \note{The organising sentence is the last one on the slide, so make them
+  write it down. Which sampler is best depends on the \emph{pipeline} the model
+  sits in.
+
+  For their projects: three of the four suggested tasks are exact-match or F1
+  against a label, so they should be running greedy and holding it fixed.
+  Someone every year reports a two-point improvement that turns out to be
+  sampling noise at $T=1$.}
+\end{frame}
+
+\begin{frame}{Decoding parameters are part of your experimental setup}
+  \begin{columns}[T]
+    \begin{column}{0.54\textwidth}
+      Three places a sampling parameter can come from, in increasing order of
+      surprise:
+      \begin{enumerate}
+        \item your API call
+        \item the server's defaults
+        \item the model's own \texttt{generation\_config.json}, shipped in the
+          repository and silently applied by \texttt{transformers}
+      \end{enumerate}
+      \vspace{0.5em}
+      They disagree. \texttt{transformers} honours the model's config; a server
+      may or may not; OpenAI-compatible clients have their own defaults for
+      \texttt{temperature} and \texttt{top\_p}.
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{block}{The rule for weeks 4--6}
+        \small
+        Set decoding parameters \textbf{explicitly}, in one place, and record
+        them next to every number you report.
+        \vspace{0.4em}
+        A speed-versus-quality table is meaningless if the two rows were
+        generated at different temperatures, and that is the easiest mistake
+        to make by accident in Thursday's lab.
+      \end{block}
+      \vspace{0.3em}
+      \small
+      Also fix \texttt{max\_tokens} and the random seed, and report the
+      \emph{distribution} of your measurements, not only the mean.
+    \end{column}
+  \end{columns}
+  \note{Short, unglamorous slide that saves people a lot of time. Jussi will
+  return to the same point in week 4 from the evaluation side. This is the
+  serving side of it.
+
+  Concrete: a model whose \texttt{generation\_config.json} sets
+  \texttt{temperature=0.7} will not be greedy just because you did not ask for
+  sampling. People lose an afternoon to this.
+
+  Foreshadow section 8 lightly: even with everything pinned, including the
+  seed, two runs can differ. We will find out why at the end.}
+\end{frame}
+
+\begin{frame}{Reasoning on or off: what thinking tokens cost}
+  A reasoning model pays for its accuracy in \key{output tokens}, which are the
+  expensive kind, because each one costs a full forward pass.
+  \vspace{0.5em}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \small
+      \begin{itemize}
+        \item Effort level correlates with token usage, and token usage
+          correlates with accuracy \cit{Raschka, Jul 2026}
+        \item Kimi's \textit{Toggle} training cuts generated tokens by
+          \textbf{25--30\%} with little benchmark change, and the saving
+          transfers from maths and code RL to GPQA and MMLU-Pro
+        \item GPT-5.6 \textit{Luna} uses \textbf{80\% more tokens} than
+          \textit{Sol} at comparable scores: a smaller model buys the same
+          result with more thinking
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Worked, for a serving budget}
+        \small
+        Answer without thinking: 150 output tokens.\\
+        Answer with thinking: 1{,}800 output tokens.\\[0.3em]
+        At a per-user TPOT of 5\,ms that is
+        \textbf{0.75\,s} versus \textbf{9\,s} of GPU-seconds for the
+        \emph{same question}, a $12\times$ difference in both latency and cost.
+      \end{block}
+      \vspace{0.2em}
+      \small
+      And the KV cache grows with every one of those tokens, so a reasoning
+      request also occupies more memory for longer.
+    \end{column}
+  \end{columns}
+  \sources{Raschka, \textit{Controlling Reasoning Effort in LLMs}, Jul 2026;
+    Kimi K2.5 / Toggle report; Artificial Analysis Intelligence Index v4.3,
+    as reported in Raschka, Jul 2026.}
+  \note{Say the $12\times$ slowly. Turning reasoning on is an
+  order-of-magnitude decision about your serving bill, not a small quality
+  knob.
+
+  Second-order point that will matter in section 3: thinking tokens are KV
+  cache. A reasoning request holds a GPU slot for twelve times as long, so your
+  concurrency drops by the same factor even though nothing about the model
+  changed.
+
+  Date everything here. These are late-2026 figures about specific models and
+  they will be wrong by next autumn.}
+\end{frame}
+
+% Model-specific controls change quickly and are retained as optional reference.
+\iffalse
+\begin{frame}[shrink=4]{Asking for less thinking: the interfaces, late 2026}
+  \centering
+  \footnotesize
+  \begin{tabular}{@{}L{2.5cm} L{4.6cm} L{3.6cm}@{}}
+    \toprule
+    \textbf{Model} & \textbf{How you ask} & \textbf{Values}\\
+    \midrule
+    gpt-oss, GPT-5.6 & system prompt \texttt{"Reasoning effort: ..."} & low / medium / high\\
+    Qwen3 & tokenizer \texttt{enable\_thinking}; \texttt{/think}, \texttt{/no\_think} flags & on / off, plus a hard token budget\\
+    GLM-5 & chat template, turn-level \texttt{thinking: disabled} & on / off\\
+    Nemotron 3 Ultra & chat template, plus an independent token budget & off / medium / regular\\
+    DeepSeek V4 & three trained modes & Non-think / Think High / Think Max\\
+    Kimi K3 & \texttt{reasoning\_effort} API parameter & low / high / max (default)\\
+    Inkling & system message \texttt{"Thinking effort level: 0.8"} & continuous in $[0,1]$\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.7em}
+  \raggedright
+  \small
+  Recall from week 2: these instructions \textbf{select a behaviour that
+  post-training created}. Pasting \texttt{"Reasoning effort: high"} into an
+  arbitrary model does nothing at all.
+  \source{Raschka, \textit{Controlling Reasoning Effort in LLMs}, Jul 2026.}
+  \note{Do not read the table. Point at three rows: the system-prompt route
+  (gpt-oss), the chat-template route (Qwen3, GLM-5, Nemotron) and the
+  API-parameter route (Kimi K3). Then point at Inkling, which is the odd one
+  out because its control is continuous rather than ordinal.
+
+  The callback to Lecture 3 is worth repeating: these are interfaces to a
+  behaviour that post-training put there.
+
+  Serving consequence, which is why it is in \emph{this} lecture: effort is a
+  per-request parameter, so your server has to cope with requests whose output
+  lengths differ by an order of magnitude, which is exactly the situation that
+  makes static batching fall apart in section 4.}
+\end{frame}
+
+\begin{frame}{The hook: ``which model'' and ``how much thinking'' are one question}
+  \centering
+  \begin{tikzpicture}
+    \begin{semilogxaxis}[
+      width=7.6cm, height=4.6cm,
+      xlabel={cost per task (relative, log scale)},
+      ylabel={benchmark score},
+      xmin=0.2, xmax=100, ymin=45, ymax=88,
+      xtick={0.3,1,3,10,30,100},
+      xticklabels={0.3,1,3,10,30,100},
+      tick label style={font=\tiny}, label style={font=\scriptsize},
+      grid=both, grid style={UHGrey!20},
+      legend style={font=\tiny, at={(0.97,0.03)}, anchor=south east,
+                    draw=none, fill=white},
+    ]
+      \addplot[UHBlue, thick, mark=*, mark size=1.4pt] coordinates
+        {(0.3,52) (0.8,61) (2.0,68) (5.0,72) (12,74)};
+      \addlegendentry{smaller model, effort low \textrightarrow{} max}
+      \addplot[UHOrange, thick, mark=square*, mark size=1.4pt] coordinates
+        {(1.5,63) (4.0,71) (10,77) (25,80) (60,81)};
+      \addlegendentry{larger model, effort low \textrightarrow{} max}
+      \draw[UHGrey, dashed] (axis cs:4.0,45) -- (axis cs:4.0,88);
+      \node[lbl, anchor=south west] at (axis cs:4.3,46) {same cost, same score};
+    \end{semilogxaxis}
+  \end{tikzpicture}
+
+  \vspace{0.2em}
+  \raggedright\small
+  The curves \key{overlap}. A smaller model at high reasoning effort reaches
+  roughly the score of a larger model at low effort, for roughly the same
+  money. Both curves are also \warn{flat at the right-hand end}, so past some
+  point you pay more and learn nothing.
+  \source{Shape after the Artificial Analysis cost-versus-index curves
+    discussed in Raschka, \textit{Controlling Reasoning Effort}, Jul 2026.
+    \textbf{Schematic: the shape is the claim, not the values.}}
+  \note{This is the slide that reframes the whole lecture, so give it a full
+  ninety seconds.
+
+  The naive mental model is two separate decisions: pick a model, then pick
+  settings. The curves say it is \emph{one budget decision} along a single
+  cost axis, and that the two levers are partly interchangeable.
+
+  Two caveats to state explicitly, because this is a research-literacy course.
+  First, the x-axis is API \emph{price} rather than compute, so it mixes
+  provider margins into a technical plot. Second, the curve shapes are
+  benchmark-specific; this overlap is reported for coding-agent indices and
+  should not be assumed everywhere.
+
+  Close the section: everything after this is about moving your own curve left,
+  i.e. getting the same score for less money, on hardware you control.}
+\end{frame}
+\fi
+
+% =====================================================================
+\section{Prefill vs decode}
+% =====================================================================
+
+\begin{frame}{One request, two different computations}
+  \centering
+  \begin{tikzpicture}[x=1mm, y=1mm]
+    % prefill block
+    \fill[UHBlue!35, draw=UHBlue] (0,0) rectangle (26,7);
+    \node[font=\scriptsize] at (13,3.5) {prefill};
+    % decode steps
+    \foreach \i in {0,...,9} {
+      \fill[UHOrange!25, draw=UHOrange] ({28+\i*7},0) rectangle ({33+\i*7},7);
+    }
+    \node[font=\scriptsize] at (62,3.5) {};
+    \node[lbl, anchor=west] at (99,3.5) {decode, one token per step};
+    % arrows
+    \draw[flow] (0,-4) -- (26,-4);
+    \node[lbl, anchor=north] at (13,-5) {TTFT};
+    \draw[flow] (28,12) -- (35,12);
+    \node[lbl, anchor=south] at (31.5,12.5) {TPOT};
+    \node[lbl, anchor=east] at (-2,3.5) {time $\rightarrow$};
+  \end{tikzpicture}
+  \vspace{0.3em}
+
+  \centering
+  \small
+  \begin{tabular}{@{}L{2.2cm} L{4.4cm} L{4.6cm}@{}}
+    \toprule
+    & \textbf{Prefill} & \textbf{Decode}\\
+    \midrule
+    What & the whole prompt at once & one new token per step\\
+    Shape & matrix $\times$ matrix & matrix $\times$ \emph{vector}\\
+    Reads & every weight once, for 2{,}000 tokens & every weight once, for 1 token\\
+    Limited by & \key{how fast the chip multiplies} & \key{how fast memory feeds it}\\
+    Felt as & \key{TTFT} --- wait for the first token & \key{TPOT} --- gap between tokens\\
+    \bottomrule
+  \end{tabular}
+  \note{Clock check: should be around 16:28.
+
+  Draw the picture on the board as well. This asymmetry matters more than
+  anything else in serving, and it follows directly from the causal
+  mask in week 1: training and prefill can process the whole triangle in
+  parallel, decode cannot, because token $t+1$ does not exist until token $t$
+  has been produced.
+
+  The line to repeat: in decode you read the entire model from HBM to produce
+  \emph{one} token. That is an absurd ratio, and every technique in the rest of
+  the lecture is a reaction to it.}
+\end{frame}
+
+\begin{frame}{Fetching a number costs far more than multiplying it}
+  A GPU does two things, and they are nothing like equally expensive:
+  \begin{itemize}
+    \item \key{fetching} a weight out of the card's memory into the arithmetic
+      units --- \textbf{slow};
+    \item \key{multiplying} with it once it has arrived --- roughly a hundred
+      times cheaper.
+  \end{itemize}
+  So the number that decides your speed is: \emph{how much arithmetic do you
+  get out of each byte you went to the trouble of fetching?} That ratio is
+  called \key{arithmetic intensity}, measured in FLOPs per byte read.
+  \vspace{0.3em}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \begin{block}{Decode: one token at a time}
+        \small
+        Read all 8\,GB of weights and use each weight in one multiply-add per
+        token. Batch 32 users and each fetched weight serves 32 tokens.
+        Intensity $\approx$ the number of tokens in the step.
+      \end{block}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{Prefill: the whole prompt at once}
+        \small
+        A 2{,}000-token prompt goes through in one pass. The same 8\,GB is read
+        once and reused two thousand times over. Intensity $\approx 2000$.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \vspace{0.4em}
+  \centering
+  \key{For ordinary decode, batching is the main way to reuse fetched
+  weights.}
+  \note{The derivation, which is worth doing on the board because it explains
+  everything that follows. Write $I = \text{FLOPs} / \text{bytes moved}$. For
+  the linear layers of a dense model with $N$ parameters in bf16, running $B$
+  tokens through one forward pass: $\text{FLOPs} \approx 2NB$ (each weight does
+  one multiply-add, i.e.\ 2 FLOPs, per token), $\text{bytes read} \approx 2N$
+  (two bytes per weight, read once). Hence $I \approx B$ FLOP per byte, so the
+  arithmetic intensity is just the batch size. Decode with one sequence is
+  $B=1$; batching 32 users gives $I \approx 32$; a 2{,}000-token prefill is
+  $B = 2000$.
+
+  Note the deliberate simplification: this ignores attention over the KV cache,
+  which at long context becomes a second, separate bandwidth problem. Flag
+  that, and say we return to it in section 3.
+
+  Then the line that sets up the next slide: if the hardware wants hundreds of
+  multiply-adds per byte and decode gives it one, most of the GPU is sitting
+  idle, and we can say exactly how much.}
+\end{frame}
+
+\begin{frame}[shrink=6]{The roofline}
+  \centering
+  \begin{tikzpicture}
+    \begin{loglogaxis}[
+      width=8.2cm, height=5.0cm,
+      xlabel={arithmetic intensity (FLOP per byte)},
+      ylabel={achievable (TFLOP/s)},
+      xmin=0.5, xmax=20000, ymin=1, ymax=3000,
+      xtick={1,10,100,1000,10000},
+      ytick={1,10,100,1000},
+      grid=both, grid style={UHGrey!20},
+      tick label style={font=\tiny}, label style={font=\scriptsize},
+    ]
+      \addplot[UHBlue, very thick] coordinates {(0.5,2) (247,990)};
+      \addplot[UHGreen, very thick] coordinates {(247,990) (20000,990)};
+      \addplot[only marks, mark=*, UHOrange, mark size=2.2pt] coordinates
+        {(1,4) (32,128) (4096,990)};
+      \draw[UHGrey, dashed] (axis cs:247,1) -- (axis cs:247,990);
+      \node[lbl, anchor=west] at (axis cs:1.4,4.4) {decode, 1 user};
+      \node[lbl, anchor=west] at (axis cs:45,115) {decode, 32 users};
+      \node[lbl, anchor=east] at (axis cs:3200,640) {prefill};
+      \node[lbl, anchor=west] at (axis cs:300,2.6) {corner at 247};
+      \node[lbl, anchor=west, text=UHBlue] at (axis cs:0.7,40)
+        {memory roof: 4.0\,TB/s};
+      \node[lbl, anchor=east, text=UHGreen] at (axis cs:18000,1450)
+        {compute roof: 990\,TFLOP/s bf16};
+    \end{loglogaxis}
+  \end{tikzpicture}
+
+  \vspace{0.2em}
+  \raggedright\small
+  A \key{roofline} is a ceiling chart: whatever your code does, it cannot go
+  above either line. The sloped part is the limit set by how fast memory feeds
+  the chip. The flat part is where the multipliers themselves become the
+  limit. This card can do about 990 trillion floating-point operations a second but fetch only
+  4 terabytes a second, so it is not even nominally busy until you hand it
+  about \textbf{250 FLOPs per byte}, which works out at \key{roughly
+  250 tokens in every decode step.}
+  \source{Roofline model: Williams, Waterman \& Patterson, CACM 2009.
+    Hardware figures: NVIDIA GH200 (H100-class, 96\,GiB HBM3) product
+    specifications.}
+  \note{This is the central picture of the lecture. Spend time on it.
+
+  Read it as a budget. The diagonal says ``this is all you can do if you are
+  memory-limited'', the flat line says ``this is all you can do, full stop'',
+  and any real kernel sits under both. The corner (the ``ridge point'') is
+  $990 / 4.0 \approx 247$ FLOP per byte. Below that you are limited by
+  bandwidth and above it by arithmetic.
+
+  Then the sentence that should make them uncomfortable: at batch size 1,
+  decode runs at about $4/990$, i.e. under half a percent of the GPU's
+  arithmetic capability. We bought a 990 TFLOP/s machine and are using four of
+  them. No software bug is involved. That is simply what generating one token
+  at a time costs.
+
+  Honest caveats: 990 TFLOP/s is dense bf16 peak, which no kernel achieves, and
+  the ridge point shifts with precision. In FP8 the compute roof roughly
+  doubles, so the ridge moves right and batching matters even more.}
+\end{frame}
+
+\begin{frame}{A bandwidth estimate for decode speed}
+  \[
+    \text{tokens per second} \;\lesssim\;
+    \frac{\text{memory bandwidth}}{\text{bytes of weights}}
+  \]
+  \emph{In words:} how many times per second can the card read the whole model?
+  \vspace{0.2em}
+  \begin{columns}[T]
+    \begin{column}{0.62\textwidth}
+      \textbf{Your project model, 4B in bf16, on one GH200:}
+      \begin{itemize}\small
+        \item 4 billion weights, 2 bytes each: \textbf{8\,GB} to read for
+          every single token
+        \item the card moves \textbf{4.0\,TB} of memory per second
+        \item 8\,GB goes into 4.0\,TB about \key{500 times}, so 500 tokens a
+          second, i.e.\ 2\,ms each
+      \end{itemize}
+      \vspace{0.2em}
+      That is the \emph{ceiling} for a single stream, however good the kernels
+      are.
+    \end{column}
+    \begin{column}{0.38\textwidth}
+      \textbf{Include the KV cache}
+      \vspace{0.2em}
+      \small
+      At 8k context, this example also reads about 1.2\,GB of cached keys and
+      values each step. The ceiling becomes
+      \[
+        4.0\,\mathrm{TB/s} \div 9.2\,\mathrm{GB}
+        \approx \textbf{430 tokens/s}.
+      \]
+    \end{column}
+  \end{columns}
+  \source{NVIDIA GH200 Grace Hopper Superchip datasheet (HBM3 and HBM3e
+    variants); CSC, \texttt{docs.csc.fi/computing/systems-roihu}.}
+  \note{Make them do this one out loud with you. It is two numbers and one
+  division, and they will use it more often than anything else today.
+
+  In symbols, if they want it written down: bytes per token
+  $\approx 4\times10^{9}\times 2 = 8\times10^{9}$, bandwidth
+  $\approx 4.0\times10^{12}$ B/s, so tokens/s
+  $\lesssim 4.0\times10^{12}/8\times10^{9} = 500$; with the cache,
+  $4.0\times10^{12}/9.2\times10^{9} \approx 430$.
+
+  Insist on the sourcing habit: the bandwidth figure is a spec-sheet number for
+  a specific SKU, and the 96\,GiB and 144\,GB GH200 parts differ by about a
+  fifth. Someone quoting ``GH200 bandwidth'' without saying which has already
+  made a larger error than most of the optimisations we discuss today will fix.
+
+  The KV-cache correction in the right column is where the cache first appears
+  as a \emph{bandwidth} problem as well as a memory one: you re-read the whole
+  cache every single step.}
+\end{frame}
+
+\begin{frame}{From the ceiling to a measured speed}
+  \centering
+  \begin{tabular}{@{}L{5.0cm} R{2.2cm} L{4.0cm}@{}}
+    \toprule
+    & \textbf{tokens/s} & \textbf{why lower}\\
+    \midrule
+    Paper ceiling, weights only & 500 & ---\\
+    Ceiling including an 8k KV cache & $\approx$ 430 & you re-read the cache every step\\
+    Realistic achieved bandwidth ($\approx$ 70\%) & $\approx$ 300 & imperfect access patterns\\
+    What a server actually reports, $B=1$ & \textbf{150--250} & scheduler, Python, HTTP, sampling\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.3em}
+  \raggedright
+  Measure single-stream TPOT, invert it, and compare the result with the
+  estimate. A result within a factor of two is useful agreement for this
+  simplified model. Then repeat at concurrency 8 and 32: aggregate throughput
+  should rise while each request receives a smaller share of the server.
+  \note{The honest framing: a back-of-envelope estimate that lands within
+  $2\times$ of reality is a success. Engineers use these to decide whether an
+  idea is worth trying at all.
+
+  Tell them what ``something is wrong'' looks like in practice: measuring with
+  the server still warming up, counting the prefill time inside TPOT, running
+  on CPU by accident, or an output length so short that start-up dominates.
+  The lab briefing on Thursday has the protocol.
+
+  This slide is the course's recurring promise in miniature: every lecture
+  contains at least one number they reproduce themselves.}
+\end{frame}
+
+\begin{frame}[shrink=4]{TTFT, TPOT, and who feels which}
+  \[
+    \text{total wait} \;=\;
+    \underbrace{\mathrm{TTFT}}_{\text{reading the prompt}} \;+\;
+    \underbrace{\mathrm{TPOT} \times \text{(tokens after the first)}}
+               _{\text{generating the answer}}
+  \]
+  \emph{In words:} you wait once for the prompt, then once per token produced.
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \textbf{Worked, 4B model, 2{,}000-token prompt, 500 output tokens:}
+      \small
+      \begin{itemize}
+        \item prefill: pushing 2{,}000 tokens through a 4B model is about
+          16 trillion floating-point operations
+        \item the card really achieves about 400 trillion a second, so:
+          \key{40\,ms}
+        \item decode: 500 tokens at 5\,ms each is \key{2.5\,s}
+      \end{itemize}
+      \vspace{0.4em}
+      Prefill is \textbf{1.6\%} of the wall clock. Two thousand prompt tokens
+      cost about as much time as \textbf{eight} generated ones.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Who feels what}
+        \small
+        \textbf{TTFT} --- chat users, agents doing many short calls,
+        anything with a spinner.\\[0.3em]
+        \textbf{TPOT} --- anyone reading a streamed response. Anything under
+        about 30\,ms per token feels instant, and by 100\,ms it starts to feel
+        broken.\\[0.3em]
+        \textbf{Neither} --- batch jobs. For offline scoring only
+        \emph{throughput} matters, and you should batch as hard as the memory
+        allows.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \note{The prefill arithmetic in symbols, for the board: FLOPs
+  $\approx 2Nn = 2\times4\times10^{9}\times 2000 = 1.6\times10^{13}$, divided
+  by an achieved $4\times10^{14}$ FLOP/s gives 40\,ms. The full latency
+  expression is $\mathrm{TTFT} + \mathrm{TPOT}\times(n_{\text{out}}-1)$.
+
+  The 1.6\% figure usually surprises people, and it is the practical
+  justification for prefix caching and for chunked prefill later on. Prefill
+  takes very little wall-clock time, but it arrives in one lump, which is why
+  it can stall everyone else.
+
+  Reading speed as the TPOT yardstick is worth giving: a fast reader does
+  roughly 5 words per second, which is maybe 7 tokens per second, i.e. 140\,ms
+  per token. Any TPOT below about 30\,ms is already faster than anyone reads,
+  so further latency work on a chat product buys nothing a user can perceive.
+  Spend the effort on throughput.
+
+  Third bullet is the one students forget: for their own evaluation runs, they
+  are a batch job, and they should stop optimising latency entirely.}
+\end{frame}
+
+\begin{frame}{Which technique helps which phase}
+  \centering
+  \begin{tabular}{@{}L{4.4cm} C{2.4cm} C{2.4cm}@{}}
+    \toprule
+    \textbf{Technique} & \textbf{helps prefill} & \textbf{helps decode}\\
+    \midrule
+    Bigger batches & no (already busy) & \textbf{yes, hugely}\\
+    INT4 weight-only quantisation & \warn{can hurt} & \textbf{yes}\\
+    FP8 weights + activations & \textbf{yes} & \textbf{yes}\\
+    KV-cache quantisation & slightly & \textbf{yes}\\
+    Prefix caching & \textbf{yes, enormously} & no\\
+    Speculative decoding & no & \textbf{yes}\\
+    \bottomrule
+  \end{tabular}
+  \vfill
+  \begin{takeaway}
+    Work out which half of the request you are paying for before you optimise.
+  \end{takeaway}
+  \note{Use this table as the map for the rest of the lecture, since every row
+  is a section heading later on. Promise them that and move on, and do not
+  explain the rows now. Add out loud that decode is usually the half you are
+  paying for, and that memory bandwidth is what limits it.
+
+  Three more rows that belong on this map and that we will reach later:
+  FlashAttention helps prefill a lot and decode somewhat; chunked prefill does
+  not speed prefill up but stops it from blocking decode; and more GPUs in
+  tensor parallel help prefill, and help decode too if the interconnect is
+  fast enough.
+
+  The one row to point at is INT4. It is a genuine trade rather than a free
+  win, and it is one of today's three gotchas. Tell them it is coming in
+  section 5 so they are listening for it.
+
+  Section hand-off: we have established that decode moves eight gigabytes of
+  weights per token. The next section is about the \emph{other} thing you have
+  to move and store, which is bigger and which nobody budgets for.}
+\end{frame}
+
+% =====================================================================
+\section{The KV cache}
+% =====================================================================
+
+\begin{frame}{Week 1's formula, read as a budget}
+  \small
+  \[
+    \text{KV bytes} = \text{requests} \times \text{tokens} \times
+    \text{layers} \times \text{KV heads} \times
+    \underbrace{\text{numbers per head}}_{128} \times
+    \underbrace{2}_{\text{key and value}} \times
+    \underbrace{2}_{\text{bytes each, bf16}}
+  \]
+  \normalsize
+  \emph{In words:} every layer stores two small vectors for every token of
+  every request, and you pay for all of them at once.
+  Your project model has 36 layers and 8 KV heads, so
+  \[
+    36 \times 8 \times 128 \times 2 \times 2 \;\approx\;
+    147\unit{kB}\ \text{per token}
+  \]
+  \vspace{-0.3em}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \begin{block}{In week 1 this was an architecture slide}
+        \small
+        It explained why GQA, MLA, SWA and cross-layer sharing exist.
+      \end{block}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{Today it is a capacity planning slide}
+        \small
+        It tells you how many people you can serve, and it is the number your
+        server runs out of first.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \vspace{0.4em}
+  \centering
+  \small
+  And this is not only a storage cost. Every decode step \emph{reads the whole
+  cache back}, so it eats bandwidth too.
+  \note{Clock check: should be around 16:38.
+
+  The symbolic version, as it appeared in week 1:
+  $B \times n \times L \times h_{kv} \times d_{\text{head}} \times 2 \times b$,
+  with $B$ requests, $n$ tokens, $L=36$ layers, $h_{kv}=8$ KV heads,
+  $d_{\text{head}}=128$ and $b=2$ bytes for bf16.
+
+  Put the week 1 number on screen unchanged --- 147\,kB per token --- and say
+  explicitly that it is the same slide with a different question attached.
+  Repetition across lectures is deliberate; this is the third time they have
+  seen this formula and it should now feel like arithmetic rather than theory.
+
+  The closing line is the bit that is new today. In week 1 the cache was a
+  memory cost. In serving it is a memory cost that caps concurrency and a
+  bandwidth cost that slows every step, and you pay both.}
+\end{frame}
+
+\begin{frame}{The same model at 8k and at 128k}
+  \centering
+  \begin{tabular}{@{}L{3.2cm} R{2.6cm} R{2.6cm} R{2.4cm}@{}}
+    \toprule
+    \textbf{Context} & \textbf{KV / request} & \textbf{$\times$ weights (8\,GB)} & \textbf{of 96\,GiB}\\
+    \midrule
+    1 request @ 8k    & 1.2\,GB  & $0.15\times$ & 1\%\\
+    1 request @ 32k   & 4.8\,GB  & $0.6\times$  & 5\%\\
+    1 request @ 128k  & 19.3\,GB & $2.4\times$  & 19\%\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{1.0em}
+  \raggedright
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \textbf{One} user at 128k context occupies \key{more than twice the
+      memory of the entire model}.
+      \vspace{0.5em}
+
+      The relationship is linear: double the context and you double the cache,
+      which halves the number of users you can hold. There is no economy of
+      scale in that formula.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Units, stated once}
+        \small
+        96\,GiB $= 103$\,GB.\\
+        A server typically reserves $\approx 90\%$ of the card, and the weights
+        take 8\,GB, so
+        \[
+          0.9 \times 103 - 8 \;\approx\; \mathbf{85\unit{GB}}
+        \]
+        is what is actually available for KV. We use 85\,GB from here on.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \note{The $2.4\times$ is the number that should stick. People budget GPU
+  memory by looking at the model size, which is exactly the wrong thing to
+  look at once contexts get long.
+
+  Do the GiB-versus-GB correction openly. It is a 7\% difference, and it makes
+  a capacity estimate wrong in the direction that hurts.
+
+  The 85\,GB working figure carries through the next two slides, so write it
+  on the board.}
+\end{frame}
+
+\begin{frame}[shrink=7]{Multiply by concurrency until it breaks}
+  \centering
+  \begin{tabular}{@{}R{2.0cm} R{2.4cm} R{2.6cm} L{3.6cm}@{}}
+    \toprule
+    \textbf{Concurrent} & \textbf{KV @ 8k} & \textbf{+ 8\,GB weights} & \\
+    \midrule
+    1   & 1.2\,GB  & 9.2\,GB  & trivially fine\\
+    8   & 9.6\,GB  & 17.6\,GB & fine\\
+    32  & 38.6\,GB & 46.6\,GB & fine --- \cit{week 1's number}\\
+    64  & 77\,GB   & 85\,GB   & \warn{at the limit}\\
+    70  & 84\,GB   & 92\,GB   & \bad{over budget}\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.8em}
+  \raggedright
+  At \textbf{128k} the same arithmetic gives \textbf{4} concurrent requests:
+  sixteen times the context buys you sixteen times fewer users. The card still
+  has arithmetic to spare and nowhere left to put anyone.
+  \vfill
+  \begin{block}{The conclusion of this section}
+    \key{In this example, the KV cache sets the concurrency limit.}
+    The 4B model's weights take 8\,GB, while its cache can grow to many times
+    that at long contexts and high concurrency.
+  \end{block}
+  \note{Walk down the table a row at a time and let them see the collision
+  coming. The 32-request row is the figure from week 1, so they should
+  recognise it; the point of the table is that week 1 stopped one row too
+  early.
+
+  The sentence in the block is takeaway number two of the lecture. Say it
+  twice.
+
+  Anticipate the obvious question --- ``so why not just buy more memory?'' ---
+  and answer it now: memory is the scarce and expensive part of a GPU, and the
+  cache grows linearly with both users and context, so you lose that race. The
+  rest of this section is the alternatives.}
+\end{frame}
+
+\begin{frame}[shrink=6]{Where the memory actually goes under naive allocation}
+  \centering
+  \begin{tikzpicture}[x=1mm, y=1mm]
+    \node[lbl, anchor=west] at (-2,26) {reserve \texttt{max\_model\_len} per request:};
+    % request 1
+    \fill[UHBlue!40, draw=UHBlue] (0,16) rectangle (18,22);
+    \fill[UHGrey!15, draw=UHGrey!50] (18,16) rectangle (95,22);
+    \node[lbl, anchor=east] at (-2,19) {req 1};
+    \node[font=\tiny] at (9,19) {used};
+    \node[font=\tiny, text=UHGrey] at (56,19) {reserved, never used};
+    % request 2
+    \fill[UHBlue!40, draw=UHBlue] (0,8) rectangle (40,14);
+    \fill[UHGrey!15, draw=UHGrey!50] (40,8) rectangle (95,14);
+    \node[lbl, anchor=east] at (-2,11) {req 2};
+    \node[font=\tiny] at (20,11) {used};
+    % request 3
+    \fill[UHBlue!40, draw=UHBlue] (0,0) rectangle (9,6);
+    \fill[UHGrey!15, draw=UHGrey!50] (9,0) rectangle (95,6);
+    \node[lbl, anchor=east] at (-2,3) {req 3};
+    \draw[decorate, decoration={brace, amplitude=4pt}, UHOrange, thick]
+      (95,-2) -- (0,-2);
+    \node[lbl, anchor=north, text=UHOrange] at (47,-7)
+      {one slot sized for the worst case};
+  \end{tikzpicture}
+
+  \vspace{1.2em}
+  \raggedright\small
+  Three kinds of waste, all of them avoidable:
+  \begin{itemize}
+    \item \key{internal} --- you reserved 8k and the answer was 200 tokens
+    \item \key{reservation} --- memory held for tokens that may never be generated
+    \item \key{external fragmentation} --- free memory exists but not in one
+      contiguous run of the right size
+  \end{itemize}
+  Measured waste in pre-paged serving systems: \textbf{60--80\%} of the KV
+  region.
+  \source{Kwon et al., \textit{Efficient Memory Management for LLM Serving with
+    PagedAttention}, SOSP 2023.}
+  \note{The analogy to use is memory allocation before virtual memory: if every
+  process had to be given one contiguous physical region sized for its maximum
+  possible footprint, you would waste most of your RAM and still fail to start
+  the fourth process. That is exactly the state LLM serving was in until 2023.
+
+  The 60--80\% figure comes from the vLLM paper and is worth quoting
+  precisely. It means that one of the largest serving wins of recent years came
+  from memory management rather than from a better model or a faster kernel.
+
+  That sets up the next slide.}
+\end{frame}
+
+\begin{frame}{PagedAttention}
+  \centering
+  \begin{tikzpicture}[x=1mm, y=1mm, font=\scriptsize]
+    % logical blocks A
+    \node[lbl, anchor=west] at (0,30) {Sequence A, logical blocks};
+    \foreach \i/\lab in {0/0,1/1,2/2,3/3}
+      \node[tokcell, minimum width=8mm, fill=UHBlue!25] (A\i) at ({4+\i*10},24) {\lab};
+    % logical blocks B
+    \node[lbl, anchor=west] at (0,14) {Sequence B, logical blocks};
+    \foreach \i/\lab in {0/0,1/1}
+      \node[tokcell, minimum width=8mm, fill=UHOrange!25] (B\i) at ({4+\i*10},8) {\lab};
+    % physical pool
+    \node[lbl, anchor=west] at (62,30) {Physical KV blocks (one pool)};
+    \foreach \i in {0,...,3}
+      \node[tokcell, minimum width=8mm, fill=UHLight] (P\i) at ({66+\i*10},24) {P\i};
+    \foreach \i/\n in {0/4,1/5,2/6,3/7}
+      \node[tokcell, minimum width=8mm, fill=UHLight] (P\n) at ({66+\i*10},14) {P\n};
+    % arrows
+    \draw[flow] (A0) -- (P2);
+    \draw[flow] (A1) -- (P5);
+    \draw[flow] (A2) -- (P0);
+    \draw[flow] (A3) -- (P7);
+    \draw[flowhi] (B0) -- (P2);
+    \draw[flowhi] (B1) -- (P4);
+    \node[lbl, anchor=north, text=UHOrange] at (86,1)
+      {P2 shared, refcount 2 --- copied only on write};
+  \end{tikzpicture}
+
+  \vspace{0.6em}
+  \raggedright\small
+  \begin{itemize}
+    \item KV is stored in fixed-size \key{blocks} (16 tokens is typical),
+      allocated on demand
+    \item a per-sequence \key{block table} maps logical to physical blocks ---
+      they need not be contiguous
+    \item waste is now at most one partly-filled block per sequence:
+      \key{under 4\%}
+    \item identical prefixes can \key{share} a physical block; a block is
+      copied only when one sequence writes to it
+  \end{itemize}
+  \source{Kwon et al., SOSP 2023 --- the paper vLLM is built on.}
+  \note{Say the operating-systems word out loud: this is paging, applied to the
+  KV cache, and the block table is a page table. Several of them have taken an
+  OS course and the analogy does all the work.
+
+  Copy-on-write matters more than it looks. Sampling $n=8$ completions from one
+  prompt means eight sequences sharing every prompt block until they diverge,
+  so best-of-$n$ costs far less memory than eight independent requests. That is
+  directly relevant to anyone doing self-consistency in their project.
+
+  The 4\% versus 60--80\% comparison is the headline. One idea, borrowed from
+  1960s systems work, bought roughly a $2$--$4\times$ increase in serving
+  throughput.}
+\end{frame}
+
+\begin{frame}{Prefix caching: paying for the system prompt once}
+  \begin{columns}[T]
+    \begin{column}{0.54\textwidth}
+      If a prompt \key{begins with} tokens whose KV blocks are still cached,
+      the server reuses them and skips that part of prefill.
+      \vspace{0.5em}
+
+      Systems such as SGLang and vLLM can find and reuse a shared prefix across
+      many requests.
+      \vspace{0.5em}
+
+      This does not intentionally approximate the model, but it consumes cache
+      memory. The gain depends on whether the prefix remains resident.
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{block}{Worked: a 5-shot evaluation run}
+        \small
+        Shared prefix: system prompt + 5 examples $\approx$ 1{,}200 tokens.\\
+        Per-item suffix: $\approx$ 80 tokens.\\[0.4em]
+        Without prefix caching you prefill 1{,}280 tokens per item.
+        With it, \textbf{80}.\\[0.4em]
+        Over a 1{,}000-item test set that is
+        up to \key{$16\times$ less prefill work} while that prefix remains
+        cached.
+      \end{block}
+      \vspace{0.2em}
+      \small
+      The same idea helps multi-turn chat, agent loops and fixed RAG
+      instructions.
+    \end{column}
+  \end{columns}
+  \source{Zheng et al., \textit{SGLang: Efficient Execution of Structured
+    Language Model Programs}, 2024 (RadixAttention); vLLM automatic prefix
+    caching.}
+  \note{This is often a cheap win for evaluation workloads with a long shared
+  prefix. The gain depends on cache residency and available memory.
+
+  The ordering consequence is the practical tip. Put the stable part of your
+  prompt \emph{first} and the variable part last. A template that interpolates
+  the question into the middle of the system prompt destroys the shared prefix,
+  and nobody notices, because nothing breaks; the server just gets slower.
+
+  Forward pointer: in Dmitry's RAG lab the retrieved passages change every
+  query, so the cacheable prefix is only the instruction block. Worth saying
+  now so they design the prompt correctly in week 5.}
+\end{frame}
+
+% Architecture-specific serving examples were introduced in Lecture 1.
+\iffalse
+\begin{frame}{The week 1 attention variants, priced in users}
+  \centering
+  \small
+  \begin{tabular}{@{}L{2.4cm} L{2.8cm} L{6.0cm}@{}}
+    \toprule
+    \textbf{Move} & \textbf{Mechanism} & \textbf{What it buys at serving time}\\
+    \midrule
+    \key{Share heads} & MQA, GQA &
+      query heads share one key/value head; the cache shrinks by that factor\\
+    \key{Compress} & MLA, CCA &
+      store a squeezed-down version; the extra matrix multiply lands in a
+      phase with compute to spare\\
+    \key{Shorten} & SWA, DSA &
+      most layers keep only a recent window, so the cache grows with the
+      window rather than the context\\
+    \key{Share layers} & cross-layer KV &
+      later layers reuse earlier layers' keys and values\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.5em}
+  \raggedright
+  In week 1 these were four ways to make a config file look better. Each one
+  is really a line in the capacity table three slides ago: \key{more users on
+  the same card}.
+  \source{Raschka, \textit{A Visual Guide to Attention Variants}, Mar 2026;
+    \textit{Recent Developments in LLM Architectures}, May 2026.}
+  \note{Deliberate repetition of the week 1 taxonomy slide, with a different
+  final column. Do not re-teach the mechanisms. Ask the room what each one does
+  and let them answer.
+
+  Two details trimmed off the slide and worth saying: a sliding window in DSA
+  is 2{,}048 tokens, and cross-layer KV keeps each layer's own queries while
+  reusing the earlier layers' keys and values.
+
+  The precise statements, if pressed: GQA divides the cache by $h_q/h_{kv}$;
+  MLA caches a low-rank latent and projects it back up; sliding-window and
+  sparse attention take the cache from $O(L^2)$ to $O(L\cdot k)$ with
+  $k=2048$ in DeepSeek's DSA; cross-layer KV reuses earlier layers' $K$ and
+  $V$ tensors.
+
+  The sentence at the bottom is the point of the slide and the through-line of
+  the course: architecture decisions are cost decisions, and today is where
+  the cost turns into a number of users.
+
+  Keep this quick, ninety seconds. The next slide has the numbers.}
+\end{frame}
+
+\begin{frame}{What those moves are worth in gigabytes}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{Cross-layer KV --- Gemma 4 E2B}\\[0.3em]
+      \small
+      35 layers; the first 15 compute their own $K,V$, the final 20 reuse
+      them. Roughly half the cache disappears:
+      \key{$\approx$ 2.7\,GB saved at 128k context in bf16} (E4B: $\approx$
+      6\,GB).
+      \vspace{0.8em}
+
+      \textbf{Linear-attention hybrids --- Kimi Linear}\\[0.3em]
+      \small
+      Kimi Delta Attention at 3 linear : 1 full. Reported against full
+      attention: \key{75\% KV cache reduction} and \key{up to $6\times$ decode
+      throughput}.
+      \vspace{0.4em}
+      The mechanism is the one from week 1: a linear layer's state is a fixed
+      size, \emph{independent of context length}.
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{Read these claims carefully}
+        \small
+        ``Up to $6\times$'' is a vendor-reported figure at a favourable context
+        length and batch size, against the vendor's own full-attention
+        baseline. The measurement is probably sound. You should not expect it
+        on your own workload.
+        \vspace{0.4em}
+        The 75\% cache figure is the more robust of the two, because it follows
+        from the architecture rather than from a kernel.
+      \end{block}
+      \vspace{0.3em}
+      \small
+      Both of these are decode and concurrency wins. Neither changes prefill
+      much.
+    \end{column}
+  \end{columns}
+  \sources{Gemma 4 model card, as summarised in Raschka,
+    \textit{Recent Developments in LLM Architectures}, May 2026;
+    Kimi Linear technical report (48B), Oct 2025.}
+  \note{Two concrete numbers, both dated, both attributed, one of them
+  deliberately questioned. That pairing is the research-literacy lesson: quote
+  the number, then say what kind of number it is.
+
+  The distinction worth teaching: an architectural claim (``we store half as
+  many KV tensors'') is checkable from the config file and cannot really be
+  wrong. A throughput claim (``$6\times$ faster'') is a measurement on someone
+  else's hardware with someone else's kernels and someone else's batch size.
+  Trust them differently.
+
+  That scepticism leads straight into the caveat on the next slide.}
+\end{frame}
+\fi
+
+\begin{frame}{Capacity, summarised, with one caveat}
+  \centering
+  \begin{tabular}{@{}L{2.4cm} R{2.6cm} R{3.0cm} R{3.0cm}@{}}
+    \toprule
+    \textbf{Context} & \textbf{KV / request} & \textbf{max concurrent, bf16 KV} & \textbf{with FP8 KV}\\
+    \midrule
+    8k   & 1.2\,GB  & 70 & 140\\
+    32k  & 4.8\,GB  & 17 & 35\\
+    128k & 19.3\,GB & 4  & 8\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.4em}
+  \raggedright\small
+  One GH200, 4B model in bf16, 85\,GB available for KV.
+  \vspace{0.7em}
+  \begin{block}{A practitioner's caveat, worth repeating all term}
+    \small
+    A model with a theoretically cheaper attention mechanism is not
+    automatically cheaper to \emph{serve}. Inference stacks have years of
+    optimisation behind plain GQA and far less behind hybrid and linear
+    attention. In late 2026 a ``slower'' classic GQA model can still serve faster
+    in practice than a hybrid one.
+    \vspace{0.3em}
+    Until the kernels catch up, \key{the better-supported method usually wins}.
+  \end{block}
+  \note{Clock check: should be around 16:52 as this comes down.
+
+  The table is the deliverable of the section: three context lengths, three
+  concurrency numbers, one quantisation column that previews section 5. Tell
+  them to copy it, because the structure (not the values) is what they will
+  reproduce for their own model.
+
+  The caveat is a genuine field observation and it generalises beyond
+  attention: DSA, MLA and linear attention all took time to get fast, and a
+  published FLOP count and the wall-clock time on your own box are rarely the
+  same thing. It is also the honest reason I would still default to a GQA model
+  for a production deployment today.}
+\end{frame}
+
+% =====================================================================
+\section{Continuous batching}
+% =====================================================================
+
+\begin{frame}[shrink=9]{Static batching wastes most of the GPU}
+  \centering
+  \begin{tikzpicture}[x=1mm, y=1mm, font=\tiny]
+    \draw[UHGrey, ->] (0,-4) -- (104,-4) node[lbl, anchor=west] {time};
+    \foreach \i/\len/\y in {1/30/24, 2/52/16, 3/70/8, 4/88/0} {
+      \fill[UHBlue!35, draw=UHBlue] (0,\y) rectangle (\len,{\y+6});
+      \fill[UHGrey!15, draw=UHGrey!40] (\len,\y) rectangle (88,{\y+6});
+      \node[lbl, anchor=east] at (-2,{\y+3}) {req \i};
+    }
+    \node at (15,27) {};
+    \node[font=\tiny, text=UHGrey] at (60,27) {idle slot --- GPU does the work anyway};
+    \draw[UHOrange, thick, dashed] (88,-3) -- (88,32);
+    \node[lbl, anchor=south, text=UHOrange] at (88,32) {next batch can start};
+    % second batch
+    \foreach \y in {24,16,8,0} {
+      \fill[UHBlue!35, draw=UHBlue] (90,\y) rectangle (104,{\y+6});
+    }
+  \end{tikzpicture}
+
+  \vspace{1.0em}
+  \raggedright
+  \begin{itemize}
+    \item The batch is fixed when it starts and released when the
+      \emph{slowest} member finishes.
+    \item A finished sequence still occupies a slot; the kernel computes
+      padding for it.
+    \item Request 5 waits behind request 4's last token even though three
+      slots are free.
+  \end{itemize}
+  \key{Output lengths vary by an order of magnitude} in real traffic. A
+  one-line answer and a 4{,}000-token reasoning trace end up in the same
+  batch, so this waste is the normal case.
+  \source{Yu et al., \textit{Orca: A Distributed Serving System for
+    Transformer-Based Generative Models}, OSDI 2022.}
+  \note{Point at the grey. That is a GPU that costs two or three euros an hour,
+  running at full power, computing nothing anyone asked for.
+
+  Tie it back to section 1: reasoning effort is a per-request parameter, so the
+  spread in output lengths is something your users control rather than an
+  accident of the workload. That makes static batching worse over time.
+
+  Historical note worth thirty seconds: this is how everyone served models
+  until Orca in 2022. It is a very recent fix for a very obvious problem, which
+  should encourage anyone in the room who thinks all the good systems ideas are
+  taken.}
+\end{frame}
+
+\begin{frame}[shrink=9]{Continuous (iteration-level) batching}
+  \centering
+  \begin{tikzpicture}[x=1mm, y=1mm, font=\tiny]
+    \draw[UHGrey, ->] (0,-4) -- (104,-4) node[lbl, anchor=west] {time};
+    % req1 finishes at 30, req5 starts
+    \fill[UHBlue!35, draw=UHBlue] (0,24) rectangle (30,30);
+    \fill[UHGreen!30, draw=UHGreen] (31,24) rectangle (78,30);
+    \node[lbl, anchor=east] at (-2,27) {slot 1};
+    \node at (15,27) {req 1}; \node at (54,27) {req 5};
+
+    \fill[UHBlue!35, draw=UHBlue] (0,16) rectangle (52,22);
+    \fill[UHGreen!30, draw=UHGreen] (53,16) rectangle (90,22);
+    \node[lbl, anchor=east] at (-2,19) {slot 2};
+    \node at (26,19) {req 2}; \node at (71,19) {req 6};
+
+    \fill[UHBlue!35, draw=UHBlue] (0,8) rectangle (70,14);
+    \fill[UHGreen!30, draw=UHGreen] (71,8) rectangle (104,14);
+    \node[lbl, anchor=east] at (-2,11) {slot 3};
+    \node at (35,11) {req 3}; \node at (87,11) {req 7};
+
+    \fill[UHBlue!35, draw=UHBlue] (0,0) rectangle (88,6);
+    \fill[UHGreen!30, draw=UHGreen] (89,0) rectangle (104,6);
+    \node[lbl, anchor=east] at (-2,3) {slot 4};
+    \node at (44,3) {req 4};
+  \end{tikzpicture}
+
+  \vspace{1.0em}
+  \raggedright
+  The scheduler rebuilds the batch \key{every decoding iteration}, not every
+  request:
+  \begin{itemize}
+    \item a sequence that emits its stop token leaves immediately and frees
+      its KV blocks
+    \item a waiting request joins at the very next step, prefill included
+    \item padding, idle slots and head-of-line blocking all disappear
+  \end{itemize}
+  \vspace{0.3em}
+  Reported throughput gains over static batching at the same latency:
+  roughly \key{$2$--$4\times$}, before PagedAttention is even considered.
+  \source{Yu et al., OSDI 2022; Kwon et al., SOSP 2023.}
+  \note{The key word is \emph{iteration-level}. The unit of scheduling stops
+  being ``a request'' and becomes ``one forward pass'', which is the right
+  granularity because every decode step is independent of the last except
+  through the KV cache.
+
+  Note how this depends on the previous section: you can only admit a new
+  sequence mid-flight if you can allocate its KV incrementally, which is
+  exactly what paged blocks give you. Orca and PagedAttention are complements,
+  and together they are most of why a modern server is an order of magnitude
+  better than a naive loop.
+
+  No green block starts before 31 on the diagram --- point that out, it is the
+  ``join at the next step'' behaviour made visible.}
+\end{frame}
+
+\begin{frame}{Throughput and latency pull in opposite directions}
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[
+      width=7.8cm, height=4.8cm,
+      xlabel={server throughput (output tokens/s)},
+      ylabel={per-user TPOT (ms)},
+      xmin=0, xmax=4000, ymin=0, ymax=140,
+      xtick={0,1000,2000,3000,4000},
+      ytick={0,25,50,75,100,125},
+      tick label style={font=\tiny}, label style={font=\scriptsize},
+      grid=both, grid style={UHGrey!20},
+    ]
+      \addplot[UHBlue, very thick, mark=*, mark size=1.3pt] coordinates
+        {(200,9) (800,11) (1600,15) (2400,22) (3000,34) (3400,50)
+         (3600,78) (3700,130)};
+      \draw[UHRed, thick, dashed] (axis cs:0,50) -- (axis cs:4000,50);
+      \node[lbl, anchor=west, text=UHRed] at (axis cs:60,57) {latency SLO: 50\,ms};
+      \fill[UHGreen, opacity=0.10] (axis cs:0,0) rectangle (axis cs:3400,50);
+      \node[lbl, anchor=south, text=UHGreen] at (axis cs:1700,2) {goodput region};
+      \draw[UHGrey, dashed] (axis cs:3400,0) -- (axis cs:3400,50);
+      \node[lbl, anchor=west] at (axis cs:3420,20) {max goodput};
+    \end{axis}
+  \end{tikzpicture}
+
+  \vspace{0.2em}
+  \raggedright\small
+  Raise concurrency and aggregate throughput climbs, until the knee, where
+  each added request slows everyone without adding tokens. \key{Goodput} is
+  throughput that still meets the latency target, and past the knee extra load
+  produces only violations.
+  \source{Shape after published vLLM and DistServe throughput--latency sweeps;
+    values illustrative.}
+  \note{Make them read the axes carefully: \emph{more throughput is to the
+  right, worse latency is up}. The curve going up and to the right means you
+  buy throughput with latency, which is the trade the whole section is about.
+
+  Two operating points worth naming. On the far left there is one user, lovely
+  latency, and a GPU running at half a percent of peak. Near the knee you get a
+  hundred times the throughput at a latency a human can still live with.
+
+  The SLO line is where engineering meets product. There is no ``optimal''
+  operating point until someone states a latency target, and if nobody does you
+  end up tuned for a benchmark instead of for your users.
+
+  Thursday they sweep concurrency at 1, 8 and 32 and draw this curve for their
+  own model.}
+\end{frame}
+
+\begin{frame}{Chunked prefill}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \textbf{The problem.} A 32k-token prompt arrives. Its prefill is one
+      large, compute-bound forward pass. For its duration, every other user's
+      decoding stops.
+      \vspace{0.4em}
+
+      One 32k prefill at $\approx$ 400\,TFLOP/s is roughly \key{650\,ms}, and
+      that shows up as a 650\,ms stall in somebody else's token stream, for a
+      request they have nothing to do with.
+      \vspace{0.7em}
+
+      \textbf{The fix.} Split the prefill into chunks (for example 512 tokens)
+      and schedule each chunk \emph{alongside} the decode steps of the running
+      batch.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Why it also helps throughput}
+        \small
+        A decode-only step spends its time waiting on memory and leaves the
+        arithmetic units idle. A prefill chunk is the opposite kind of work:
+        plenty of arithmetic, hardly any new weights to fetch.
+        \vspace{0.3em}
+        \key{Mixing them in one batch uses both resources at once.}
+      \end{block}
+      \vspace{0.2em}
+      \small
+      The cost: TTFT for the long prompt gets slightly worse, because its
+      prefill is now interleaved rather than monolithic. You are trading one
+      user's TTFT for everyone else's TPOT, deliberately.
+    \end{column}
+  \end{columns}
+  \source{Agrawal et al., \textit{Taming Throughput--Latency Tradeoff in LLM
+    Inference with Sarathi-Serve}, OSDI 2024; implemented in vLLM and SGLang.}
+  \note{The fairness framing is the memorable one: without chunked prefill, one
+  user with a long prompt can freeze the service for everyone, and the person
+  who suffers has no idea why.
+
+  The complementarity argument in the right-hand block is the elegant part and
+  worth drawing on the roofline from section 2: a mixed batch sits between the
+  two extreme points, using some bandwidth and some arithmetic, rather than
+  saturating one and wasting the other.
+
+  Practical note for Thursday: chunked prefill is on by default in current
+  vLLM. If their TTFT measurements look oddly high for long prompts under
+  concurrency, this is why, and it is correct behaviour.}
+\end{frame}
+
+\begin{frame}[fragile]{The flags that matter}
+\begin{lstlisting}[language=slurm]
+# annotated; in the lab these are all on one line
+vllm serve Qwen/Qwen3.5-4B-Instruct
+  --max-model-len 8192           # caps KV per request: 1.2 GB here
+  --max-num-seqs 64              # concurrency ceiling (slots)
+  --max-num-batched-tokens 8192  # tokens per scheduler step = prefill chunk
+  --gpu-memory-utilization 0.90  # fraction of the card vLLM may claim
+  --enable-prefix-caching        # free, turn it on
+  --enable-lora --lora-modules proj=./lora-week2
+  --port 8000
+\end{lstlisting}
+  \vspace{0.3em}
+  \small
+  \begin{tabular}{@{}L{4.2cm} L{7.2cm}@{}}
+    \texttt{max\_model\_len} & the biggest lever on concurrency; do not leave
+      it at the model's 128k default if your task uses 2k\\
+    \texttt{max\_num\_seqs} & raising it past what KV memory allows just moves
+      the queue inside the server\\
+    \texttt{max\_num\_batched\_tokens} & bigger $\Rightarrow$ better throughput,
+      worse tail TPOT\\
+    \texttt{gpu\_memory\_utilization} & on a shared GH200, lower it or your
+      neighbour's job dies\\
+  \end{tabular}
+  \note{Walk the flags. The one people get wrong is
+  \texttt{max\_model\_len}: it defaults to whatever the model config claims,
+  which for a 2026 model is often 128k, and that single default can cut
+  concurrency from seventy to four. It is the capacity table from section 3,
+  as a command-line argument.
+
+  \texttt{gpu\_memory\_utilization} has a social dimension on Roihu: vLLM
+  pre-allocates its KV pool at start-up, so a server left running holds the
+  memory whether or not anyone is using it. Repeat the compute-etiquette rule
+  from week 1.
+
+  Tell them this exact command, with their own model, is roughly what Thursday
+  starts with.}
+\end{frame}
+
+\begin{frame}[shrink=3]{Goodput: throughput that met the deadline}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \textbf{Throughput} --- tokens per second, summed over all users.
+      Easy to maximise: raise concurrency until memory runs out.
+      \vspace{0.5em}
+
+      \textbf{Goodput} --- tokens per second \emph{from requests that met the
+      latency target}. Everything else is counted as zero.
+      \vspace{0.6em}
+
+      Under a 50\,ms TPOT target, a server at 3{,}700 tokens/s and 130\,ms has
+      \key{a throughput of 3{,}700 and a goodput of 0}.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{How to report honestly}
+        \small
+        \begin{itemize}
+          \item warm up before timing
+          \item fix the output length
+          \item separate TTFT from TPOT
+          \item sweep concurrency: 1 / 8 / 32
+          \item report p50 \textbf{and} p95, not the mean
+        \end{itemize}
+      \end{block}
+    \end{column}
+  \end{columns}
+  \vfill
+  \begin{takeaway}
+    Continuous batching fills GPU time that was being wasted. It gives you no
+    extra memory, so the ceiling is still the KV cache, and someone still has
+    to choose where on the curve you want to sit.
+  \end{takeaway}
+  \note{Clock check: should be around 17:02.
+
+  The 3{,}700-and-zero example is deliberately absurd and it makes the
+  definition stick. Every published throughput number should prompt the
+  question ``at what latency?'', and most of them do not answer it.
+
+  The reporting checklist is Thursday's protocol in miniature, so read it
+  properly. It is what turns a lab report into evidence. The mean-versus-p95
+  point especially: users experience the tail, and a mean hides it completely.}
+\end{frame}
+
+% =====================================================================
+\section{Quantisation for inference}
+% =====================================================================
+
+\begin{frame}{Three independent places to use fewer bits}
+  \centering
+  \begin{tabular}{@{}L{2.4cm} L{3.6cm} L{5.2cm}@{}}
+    \toprule
+    \textbf{What} & \textbf{Size, 4B model} & \textbf{What lowering it buys}\\
+    \midrule
+    \key{Weights} & 8\,GB in bf16 &
+      fewer bytes read per decode step $\Rightarrow$ directly faster decode\\[0.3em]
+    \key{Activations} & small, transient &
+      lets you use the FP8 tensor cores $\Rightarrow$ faster \emph{prefill}\\[0.3em]
+    \key{KV cache} & 1.2\,GB per 8k request &
+      more concurrent users, and less to re-read every step\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.4em}
+  \raggedright
+  These are \key{orthogonal choices}. ``The model is quantised'' is as
+  uninformative as ``the model uses sliding-window attention'' was in week 1.
+  Always ask \emph{which of the three} uses fewer bits, and in what format.
+  \note{Clock check: should be around 17:02--17:04 starting this section.
+
+  The three-way split is the organising idea and it maps exactly onto the
+  prefill/decode split from section 2: weights are a decode problem,
+  activations are a prefill problem, KV is a concurrency problem. Say that
+  mapping out loud; it makes the rest of the section predictable.
+
+  The parallel with the SWA gotcha from week 1 is deliberate. The lesson
+  transfers: a named technique without its parameters tells you very little.}
+\end{frame}
+
+\begin{frame}{FP8 on a GH200}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{What it is}
+      \begin{itemize}
+        \item weights and activations use 8-bit floating-point numbers;
+        \item each tensor or block also stores a scale, because FP8 represents
+          a much narrower range than bf16;
+        \item smaller blocks use more scales but preserve outliers better.
+      \end{itemize}
+      Hopper tensor cores multiply FP8 directly, so this is a native hardware
+      format rather than compressed storage that must first be unpacked.
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \textbf{Why it is used}
+      \begin{itemize}
+        \item weights halve: 8\,GB $\to$ 4\,GB;
+        \item less weight traffic speeds up decode;
+        \item faster FP8 tensor cores can also speed up prefill.
+      \end{itemize}
+      \textbf{How to evaluate it}
+      Re-run the same held-out scorer and report quality beside latency and
+      throughput. Published average losses do not guarantee that your
+      language, task or long-context workload is unaffected.
+    \end{column}
+  \end{columns}
+  \source{NVIDIA Hopper FP8 documentation; vLLM FP8 quantisation guide.}
+  \note{Outliers are the whole story of activation quantisation, and worth
+  thirty seconds: a handful of channels in a transformer carry values hundreds
+  of times larger than the rest, and a single per-tensor scale must accommodate
+  them, which crushes everything else to a few representable levels.
+  Per-channel scaling is the standard answer.
+
+  Emphasise ``native'': FP8 on this hardware is not emulated, so you get faster
+  arithmetic as well as fewer bytes. That is why FP8 helps both phases while
+  INT4 helps only one, which is the next slide.}
+\end{frame}
+
+\begin{frame}[shrink=3]{INT4 weight-only: AWQ and GPTQ}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      Store each weight in 4 bits, \key{unpack it back to 16-bit on the GPU
+      just before use}, and do the arithmetic in bf16. Only the storage
+      shrinks; the activations stay full precision.
+      \vspace{0.6em}
+
+      \textbf{GPTQ} --- goes layer by layer on the finished model, choosing how
+      to round each weight so the layer's \emph{output} changes as little as
+      possible on a sample of real data.
+      \vspace{0.5em}
+
+      \textbf{AWQ} --- observes that a small fraction of weight channels matter
+      far more, identifies them from \emph{activation} magnitudes, and rescales
+      so those channels survive quantisation.
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{Why weight-only works at all}
+        \small
+        It helps for exactly the reason section 2 gave: decode is waiting on
+        memory. Shrinking the weights from 8\,GB to 2\,GB means a quarter of
+        the bytes per token, so the head-estimate ceiling goes from 500 to
+        \key{2{,}000 tokens/s}.
+        \vspace{0.3em}
+        When decode is strongly bandwidth-bound, much of the unpacking cost
+        can be hidden by arithmetic units that would otherwise be idle.
+      \end{block}
+      \vspace{0.2em}
+      \small
+      Both need \key{calibration data} --- a few hundred sequences. Use data
+      that looks like your task. Calibrating a Finnish NER model on English
+      web text is a real and common own-goal.
+    \end{column}
+  \end{columns}
+  \sources{Frantar et al., \textit{GPTQ}, ICLR 2023;
+    Lin et al., \textit{AWQ}, MLSys 2024.}
+  \note{The ceiling arithmetic: $4.0\times10^{12} / 2\times10^{9} = 2000$
+  tokens/s, i.e.\ the same division as the head-estimate slide with 2\,GB of
+  weights instead of 8. GPTQ is one-shot post-training quantisation using
+  second-order (Hessian) information about the layer's reconstruction error;
+  the ``unpacking'' step is dequantisation inside the matmul kernel.
+
+  The sentence to land: weight-only quantisation is a \emph{bandwidth}
+  optimisation, and it pays off only because of where decode sits on the
+  roofline. Students who understand that will predict the gotcha on the next
+  slide before you show it.
+
+  Calibration is the practical trap. The calibration set defines what ``matters''
+  for AWQ and what error GPTQ minimises, so it should resemble the deployment
+  distribution. For this course that means: if your project is Finnish, do not
+  accept an off-the-shelf INT4 checkpoint calibrated on English without
+  re-scoring it.}
+\end{frame}
+
+\begin{frame}{Why INT4 can slow down prefill}
+  Weight-only INT4 can speed up decode and \textbf{slow down prefill}.
+  Decode benefits from reading fewer weight bytes. Prefill is compute-bound,
+  so unpacking 4-bit weights to bf16 adds work to the phase that is already
+  short of arithmetic capacity. FP8 is multiplied directly by Hopper tensor
+  cores and can therefore help both phases.
+  \vspace{0.4em}
+  \centering
+  \begin{tabular}{@{}L{3.4cm} C{2.6cm} C{2.6cm} C{2.2cm}@{}}
+    \toprule
+    & \textbf{bytes/token} & \textbf{decode} & \textbf{prefill}\\
+    \midrule
+    bf16 (W16A16) & 8\,GB & baseline & baseline\\
+    FP8 (W8A8)    & 4\,GB & $\approx 1.8\times$ & $\approx 1.5\times$\\
+    INT4 (W4A16)  & 2\,GB & $\approx 3\times$ & \bad{$0.8$--$1.0\times$}\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.3em}
+  \raggedright\small
+  Indicative only: the prefill number depends heavily on the kernel and the
+  prompt length. Read the \emph{sign} rather than the magnitude.
+  \source{Behaviour reported across vLLM, TensorRT-LLM and llama.cpp kernel
+    benchmarks; see also Lin et al., AWQ, MLSys 2024.}
+  \note{Gotcha one of three. Give it a full minute and make them explain it
+  back to you, because it is a pure test of whether the roofline from section 2
+  actually landed.
+
+  The general principle underneath: an optimisation that removes a constraint
+  you are not hitting, at the cost of a resource you are short of, is a
+  pessimisation. That is a transferable idea well beyond LLMs.
+
+  Practical consequence for a long-prompt workload such as RAG in week 5: if
+  most of your tokens are prompt tokens, INT4 may be the wrong choice
+  altogether, and FP8 is the safer default on this hardware.}
+\end{frame}
+
+\begin{frame}{Quantising the KV cache}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      The third, independent knob. Store the cached keys and values in 8-bit
+      FP8 instead of 16-bit bf16, and every number in the cache halves:
+      147\,kB per token becomes \key{73.5\,kB}.
+      \small
+      \begin{itemize}
+        \item 8k context: 1.2\,GB $\to$ 0.6\,GB per request
+        \item concurrent users at 8k: 70 $\to$ \key{140}
+        \item concurrent users at 128k: 4 $\to$ \key{8}
+        \item and half the bytes re-read every decode step
+      \end{itemize}
+      \vspace{0.4em}
+      INT4 caches exist too, but need a finer-grained set of scale factors to
+      hold up.
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{Where the damage shows up}
+        \small
+        Long-context behaviour can be \textbf{more sensitive} to KV
+        quantisation: early tokens' quantised keys may be attended to thousands
+        of times.
+        \vspace{0.3em}
+        So the headline benchmark at 2k context looks untouched, and the
+        128k-context retrieval task quietly degrades. \key{Short-context
+        evaluation cannot detect this failure.}
+      \end{block}
+      \vspace{0.3em}
+      \small
+      Position encoding makes the keys harder to quantise than the values:
+      rotating them spreads their values out.
+    \end{column}
+  \end{columns}
+  \source{Hooper et al., \textit{KVQuant}, NeurIPS 2024; vLLM FP8 KV cache
+    documentation.}
+  \note{The detail behind ``finer-grained scale factors'': INT4 KV generally
+  needs per-channel scaling for the keys $K$ and per-token scaling for the
+  values $V$. And RoPE is what makes $K$ the harder of the two --- rotated keys
+  have a wider, position-dependent distribution than values do.
+
+  This knob buys the most memory for the least risk, and it is usually the last
+  one people reach for, because it is not what ``quantisation'' means in most
+  blog posts.
+
+  The accumulation argument is the technical heart of the slide. Weight
+  quantisation error is fixed and applied uniformly; KV error is written once
+  per token and then read back for the rest of the generation, so its influence
+  grows with context length.
+
+  Which is a direct instruction for their evaluation: if they quantise the KV
+  cache, they must evaluate at the context length they intend to deploy at, not
+  at the length that is convenient.}
+\end{frame}
+
+\begin{frame}{The quality cost, and where it shows up}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      For FP8 and good INT4 the published quality loss is usually
+      \textbf{under a point} on MMLU-style benchmarks. That average hides
+      where the damage actually lands:
+      \begin{itemize}\small
+        \item \key{long-tail inputs}: rare formats, unusual prompts
+        \item \key{non-English text}, especially morphologically rich languages
+        \item \key{long reasoning chains}, where one bad token derails the rest
+        \item \key{long contexts}, if you quantised the KV cache
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Which is why Thursday makes you score it}
+        \small
+        Serve the model in FP8, run the same held-out scorer used in week 2,
+        and put the score in the same table as the tokens per second.
+        \vspace{0.4em}
+        \key{Always report the quality number next to the speed number.}
+      \end{block}
+    \end{column}
+  \end{columns}
+  \vfill
+  \begin{takeaway}
+    FP8 is the safe default on a GH200 and INT4 is a bet on decode. Either
+    way, the only quality number worth anything is the one you measured on
+    your own task.
+  \end{takeaway}
+  \note{Clock check: should be around 17:11.
+
+  Two things trimmed from the slide. First, weights, activations and the KV
+  cache are three separate decisions, and you can take them independently.
+  Second, the non-English bullet is really about tokenizer fertility: a
+  morphologically rich language needs more tokens per word, so quantisation
+  error has more steps to accumulate over.
+
+  The multilingual point is not a throwaway. A benchmark average over mostly
+  English, mostly short, mostly well-formed inputs is the measurement least
+  able to see quantisation damage, and several of them have Finnish projects
+  where this is a live problem rather than a hypothetical one.
+
+  They already have a task scorer from week 2 and a held-out set from week 1,
+  so the extra work here is small. The last line of the block is the course's
+  recurring demand in one sentence. Say it, then move on: the next
+  section is the only technique today that is genuinely free.}
+\end{frame}
+
+% =====================================================================
+\section{Speculative and constrained decoding}
+% =====================================================================
+
+\begin{frame}{Speculative decoding}
+  \centering
+  \begin{tikzpicture}[x=1mm, y=1mm, font=\scriptsize]
+    % drafter
+    \node[lbl, anchor=east] at (-2,30) {small drafter};
+    \foreach \i/\t in {0/{the}, 1/{cat}, 2/{sat}, 3/{under}} {
+      \node[tokcell, minimum width=13mm, fill=UHLight] (d\i) at ({8+\i*16},30) {\t};
+    }
+    \node[lbl, anchor=west] at (72,30) {$k=4$ proposals, 4 cheap passes};
+    % target
+    \fill[UHBlue!20, draw=UHBlue] (0,16) rectangle (66,24);
+    \node at (33,20) {target model: \textbf{one} forward pass over all 4+1 positions};
+    \node[lbl, anchor=east] at (-2,20) {verify};
+    % result
+    \node[lbl, anchor=east] at (-2,6) {result};
+    \node[tokon, minimum width=13mm] at (8,6) {the};
+    \node[tokon, minimum width=13mm] at (24,6) {cat};
+    \node[tokon, minimum width=13mm] at (40,6) {sat};
+    \node[tokmask, minimum width=13mm] at (56,6) {under};
+    \node[tokcell, minimum width=13mm, fill=UHOrange!30] at (72,6) {on};
+    \node[lbl, anchor=west] at (80,6) {resampled by the target};
+    \draw[flow] (d0) -- (8,24.5);
+    \draw[flow] (d3) -- (56,24.5);
+    \node[lbl, anchor=north, text=UHGreen] at (24,1) {3 accepted};
+    \node[lbl, anchor=north, text=UHRed] at (58,1) {1 rejected};
+  \end{tikzpicture}
+
+  \vspace{1.2em}
+  \raggedright
+  Four target-model tokens' worth of progress from \key{one} target forward
+  pass. The target pass costs almost the same as a single-token pass, because
+  verifying 5 positions is still a tiny batch on a bandwidth-bound GPU, and
+  the weights are read once either way.
+  \sources{Leviathan et al., \textit{Fast Inference from Transformers via
+    Speculative Decoding}, ICML 2023;
+    Chen et al., \textit{Accelerating LLM Decoding with Speculative Sampling},
+    2023.}
+  \note{The intuition to give before the mechanism: most tokens in most text
+  are easy. ``The cat sat on the ...'' does not need a 4B model. A 0.5B drafter
+  gets the easy ones right, and the big model's job becomes checking rather
+  than generating.
+
+  The reason it is a win at all is the roofline again. Running the target over
+  five positions instead of one moves you slightly right along the bandwidth
+  roof at essentially no extra wall-clock cost, because you read the same eight
+  gigabytes of weights. Speculative decoding is a way to buy arithmetic
+  intensity you were not using.
+
+  Next slide: why this is exact and not an approximation. That is the part
+  people do not believe.}
+\end{frame}
+
+\begin{frame}[shrink=4]{Why the output distribution is unchanged}
+  The drafter proposes a token. The big model already computed how likely
+  \emph{it} thinks that token was. Compare the two numbers:
+  \[
+    \text{accept with probability }
+    \min\!\left(1,\;
+      \frac{\text{big model's probability of the token}}
+           {\text{drafter's probability of the token}}\right)
+  \]
+  \emph{In words:} keep the guess outright if the big model likes it at least
+  as much as the drafter did; otherwise keep it only sometimes. If it is
+  rejected, draw the replacement from the \key{residual} --- the part of the
+  big model's distribution the drafter had been under-weighting.
+  \vspace{0.2em}
+  \begin{columns}[T]
+    \begin{column}{0.56\textwidth}
+      \begin{block}{The guarantee}
+        \small
+        Under the algorithm's assumptions, the tokens are distributed
+        \textbf{exactly} as if they had been sampled from the big model alone.
+        \vspace{0.3em}
+        Not approximately, and not ``close enough in practice''. The procedure
+        is ordinary rejection sampling, so the result is identical by
+        construction.
+      \end{block}
+    \end{column}
+    \begin{column}{0.44\textwidth}
+      \small
+      Consequences:
+      \begin{itemize}
+        \item a poor drafter mainly reduces the potential speed-up
+        \item you still measure latency and run output regression tests
+        \item the drafter can be anything: a small model, an $n$-gram table,
+          the target's own extra heads
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \note{Write the formulas out if the room wants them. With $q$ the drafter's
+  distribution and $p$ the target's at the same position, a proposal
+  $x \sim q$ is accepted with probability $\min(1, p(x)/q(x))$, and on
+  rejection the replacement is drawn from the residual
+  $p'(x) = \max(0, p(x)-q(x)) \,/\, \sum_{x'} \max(0, p(x')-q(x'))$.
+
+  This is the nicest result in the lecture, so slow down for it.
+  It is Metropolis--Hastings-style rejection sampling applied
+  to token distributions, and the residual term is exactly what repairs the
+  bias introduced by proposing from the wrong distribution.
+
+  The practical consequence is what makes it unusual among everything else
+  today: every other technique in this lecture trades quality for speed, and
+  you have to measure what you broke. This one cannot break anything. The only
+  risk is that it fails to help.
+
+  Caveat for the pedants, and worth saying because it returns in section 8:
+  ``exact'' means exact in exact arithmetic. In floating point, $p$ computed over
+  a batch of 5 positions is not bitwise identical to $p$ computed over 1, so
+  speculative decoding does change your outputs at the bit level. Hold that
+  thought.}
+\end{frame}
+
+% Optional quantitative speculative-decoding detail.
+\iffalse
+\begin{frame}[shrink=16]{Acceptance rate decides whether this pays}
+  The \key{acceptance rate} is the fraction of the drafter's guesses the big
+  model keeps, and it decides whether any of this is worth doing.
+  With 4 guesses per round:
+
+  \vspace{0.3em}
+  \centering
+  \begin{tabular}{@{}C{3.0cm} C{3.2cm} C{3.0cm}@{}}
+    \toprule
+    \textbf{acceptance rate} & \textbf{tokens per big-model pass} &
+      \textbf{net speed-up}\\
+    \midrule
+    0.8 & 3.36 & $\approx 2.4\times$\\
+    0.6 & 2.31 & $\approx 1.6\times$\\
+    0.5 & 1.94 & $\approx 1.4\times$\\
+    0.3 & 1.42 & $\approx 1.0\times$ --- no gain\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.5em}
+  \raggedright\small
+  Net speed-up assumes a drafter costing about 10\% of a big-model pass, so
+  4 guesses add about 0.4 passes of overhead.
+  \vspace{0.6em}
+
+  \begin{block}{What moves the acceptance rate}
+    \small
+    It goes up with a drafter trained on the same data with the same tokenizer,
+    a domain the drafter knows, and a \key{low temperature}, since easy tokens
+    are easier to agree on. Unfamiliar text, a high temperature or a tokenizer
+    mismatch will collapse it. \key{Measure it on your own data.}
+  \end{block}
+  \source{Leviathan et al., ICML 2023.}
+  \note{The closed form behind the table: with per-token acceptance
+  probability $\alpha$ and $k$ proposals, the expected number of tokens per
+  target pass is $(1 - \alpha^{k+1})/(1-\alpha)$ --- a truncated geometric
+  series, because you keep accepting until the first rejection. Every row uses
+  $k=4$.
+
+  The table is the point: below about 0.4 acceptance the whole scheme
+  stops paying for itself, and you have added a second model, more memory and
+  more complexity for nothing.
+
+  Note also the interaction with batching, which is the part the papers
+  underplay. Speculative decoding spends surplus compute, and under heavy
+  continuous batching you no longer \emph{have} any, because the arithmetic
+  units are busy serving other users. So it helps most at low concurrency and
+  can hurt at high concurrency, and good servers turn it off adaptively.
+
+  So it is a latency optimisation, which is the opposite of what continuous
+  batching gives you.}
+\end{frame}
+
+% Optional current systems detail.
+\begin{frame}[shrink=3]{Self-speculation: no second model}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      Instead of a second small model, let the big model guess ahead for
+      itself.
+      \vspace{0.4em}
+
+      \textbf{Medusa} --- bolt a few extra output heads onto the model so it
+      guesses the next two or three tokens at once, then verify them all.
+      \vspace{0.4em}
+
+      \textbf{EAGLE} --- guess using the model's own internal states rather
+      than its output tokens. Higher acceptance for the same overhead; the
+      current default in several stacks.
+      \vspace{0.4em}
+
+      \textbf{MTP heads} --- ``multi-token prediction'' heads trained
+      \emph{during pretraining} as a side objective, then reused as a free
+      drafter at inference.
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{MTP in 2026 models}
+        \small
+        \textbf{DeepSeek V3} --- MTP-1 during training, optional at inference.\\[0.3em]
+        \textbf{GLM-4.7, MiniMax M2.1} --- MTP-3.\\[0.3em]
+        \textbf{Step 3.5 Flash} --- MTP-3 at training \emph{and} inference,
+        which is unusual; MTP is normally a training-only trick.\\[0.3em]
+        \textbf{Nemotron 3 Super} --- shared-weight MTP, explicitly for
+        speculative decoding.\\[0.3em]
+        \textbf{Kimi K2.5, Arcee Trinity} --- no MTP at all.
+      \end{block}
+      \vspace{0.2em}
+      \small
+      Compared with a separate drafter you get the same tokenizer, the same
+      training data and almost no extra memory.
+    \end{column}
+  \end{columns}
+  \sources{Cai et al., \textit{Medusa}, 2024; Li et al., \textit{EAGLE}, 2024;
+    Raschka, \textit{A Visual Guide to Attention Variants}, Mar 2026 and
+    \textit{A Dream of Spring for Open-Weight LLMs}, Feb 2026, for the
+    adoption map.}
+  \note{Mechanics, if asked: Medusa attaches extra decoding heads to the final
+  hidden state, predicting positions $t{+}1, t{+}2, \dots$ in parallel and
+  verifying a tree of candidates; EAGLE drafts in \emph{feature} space using
+  the target's own hidden states, which is why its acceptance rate is higher.
+
+  The through-line: MTP started as a way to get a richer training signal
+  --- predict several tokens ahead, sum the losses --- and was described as
+  training-only. Then the inference people noticed that a training-time
+  auxiliary head is a free drafter with a perfectly matched tokenizer. Nice
+  example of a technique acquiring a second life.
+
+  Point at the ``no MTP'' row too. Two 2026 flagships declined it, which tells
+  you the gain is real but not overwhelming, and it costs training complexity.
+
+  Practical note: for their 4B project models this is mostly out of reach in a
+  90-minute lab, so it is context rather than coursework. Say so.}
+\end{frame}
+\fi
+
+\begin{frame}{Constrained decoding}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{What it is}
+      \begin{itemize}
+        \item Give the server a schema or grammar for the required output.
+        \item At each step, mask tokens that would make the output invalid.
+        \item Sample from the tokens that remain.
+      \end{itemize}
+      \vspace{0.3em}
+      \textbf{Why it is used}\\
+      Applications often need parseable JSON, and retries add latency and
+      cost.
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{What it guarantees}
+        \small
+        \textbf{Valid syntax when generation completes successfully.}
+        The constraint removes invalid token sequences, but truncation and
+        server failures still need handling.
+      \end{block}
+      \begin{block}{What it does not guarantee}
+        \small
+        \textbf{Anything about the content.} The label inside the valid JSON
+        can still be wrong, and the constraint can make it wronger.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \vspace{0.4em}
+  Implementations such as \textbf{Outlines} and \textbf{XGrammar} make the
+  allowed-token lookup efficient.
+  \sources{Willard \& Louf, \textit{Efficient Guided Generation for LLMs},
+    2023 (Outlines); Dong et al., \textit{XGrammar}, 2024.}
+  \note{The FSM compilation is the clever part: because the automaton is over
+  the \emph{tokenizer's} vocabulary rather than over characters, the allowed
+  set can be precomputed per state, and the run-time cost drops to a mask
+  lookup.
+
+  Note how closely this resembles min-$p$ and top-$k$ from section 1: it is the
+  same operation, masking logits before the softmax. The only difference is
+  that the mask comes from a grammar rather than from the distribution itself.
+
+  Set up the gotcha explicitly by reading the two blocks as a pair, then turn
+  the page.}
+\end{frame}
+
+\begin{frame}{Valid syntax can still reduce task accuracy}
+  A grammar guarantees the \emph{shape} of an output, not its content.
+  The model may prefer to reason first, use another key order or decline to
+  answer. Masking those continuations can force it onto a low-probability path
+  and reduce answer quality.
+  \vspace{0.4em}
+  \centering
+  \begin{tabular}{@{}L{4.0cm} C{3.0cm} C{3.0cm}@{}}
+    \toprule
+    & \textbf{invalid output} & \textbf{task score}\\
+    \midrule
+    free generation + parser & 4--15\% & baseline\\
+    JSON-schema constrained & \good{0\%} & \warn{report it and see}\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.3em}
+  \raggedright
+  Report \textbf{both} invalid-output rate and task score. For reasoning
+  models, let the model reason freely and constrain only the final answer.
+  \note{Gotcha two of three, and it is Thursday's ``constrain'' step in a single
+  slide. The lab deliberately asks for both numbers so that the trade-off is
+  visible rather than assumed.
+
+  The mechanism to explain is distribution shift: the model is being forced
+  onto conditional paths it has low probability for, and a low-probability
+  prefix tends to be followed by low-quality continuations. A schema that
+  demands the answer field first is actively preventing chain-of-thought.
+
+  The mitigation in the last line is what a good engineer does and it costs
+  nothing: unconstrained reasoning, constrained answer. Tell them to try both
+  orders on Thursday if they have time.
+
+  Clock check: should be around 17:20 at the end of this section.}
+\end{frame}
+
+% =====================================================================
+\section{Serving systems and cost}
+% =====================================================================
+
+\begin{frame}{When one GPU is not enough}
+  First identify the constraint that one GPU cannot meet.
+  \vspace{0.3em}
+  \centering
+  \begin{tabular}{@{}L{4.2cm} L{3.0cm} L{4.0cm}@{}}
+    \toprule
+    \textbf{The problem} & \textbf{The answer} & \textbf{What it costs}\\
+    \midrule
+    weights and KV do not fit, or decode is too slow &
+      \key{split the model} & communication on every token\\[0.3em]
+    they fit, throughput is too low &
+      \key{more replicas} & more hardware, little communication\\[0.3em]
+    MoE experts dominate memory &
+      expert parallel & every GPU talks to every other\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.4em}
+  \raggedright
+  If the model fits and one copy is fast enough, run several independent
+  replicas before splitting one request across GPUs. Replicas do not exchange
+  activations and are easier to scale and recover.
+  \note{Clock check: should be around 17:20--17:22.
+
+  The names for the cost column, which the next three slides use: tensor
+  parallelism pays an \emph{all-reduce} (every GPU's partial result summed and
+  broadcast back) twice per transformer block; pipeline parallelism pays a
+  \emph{bubble} (idle stages); expert parallelism pays an \emph{all-to-all}
+  per MoE layer.
+
+  Lead with the replica rule because it is the one that applies to everyone in
+  this room: a 4B model on a 96\,GiB card never needs tensor parallelism, and
+  someone will try it anyway and get a slower server.
+
+  The three-row structure is the decision tree. The useful question is which
+  constraint you are hitting: memory, latency or throughput. Each has a
+  different answer, and people confuse them all the time.}
+\end{frame}
+
+% Detailed multi-GPU mechanisms are optional reference material. The
+% projected lecture keeps the decision slide that explains when they are used.
+\iffalse
+\begin{frame}{Tensor parallelism}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.47\textwidth}
+      \centering
+      \begin{tikzpicture}[node distance=4mm, font=\scriptsize]
+        \node[modmute] (x) {activations $x$};
+        \node[mod, below left=6mm and 0mm of x] (g0) {GPU 0\\\tiny half the heads,\\half the FFN};
+        \node[mod, below right=6mm and 0mm of x] (g1) {GPU 1\\\tiny half the heads,\\half the FFN};
+        \node[modhi, below=14mm of x] (ar) {all-reduce};
+        \node[modmute, below=4mm of ar] (y) {output};
+        \draw[flow] (x) -- (g0);
+        \draw[flow] (x) -- (g1);
+        \draw[flowhi] (g0) -- (ar);
+        \draw[flowhi] (g1) -- (ar);
+        \draw[flow] (ar) -- (y);
+      \end{tikzpicture}
+    \end{column}
+    \begin{column}{0.53\textwidth}
+      Every weight matrix is split across the GPUs, so each one does part of
+      every layer. Attention splits by head and the FFN by hidden dimension.
+      \begin{itemize}\small
+        \item \key{two all-reduces per transformer block}, on every token:
+          each GPU's partial result is summed and sent back to all of them
+        \item the KV cache is split too, so concurrency scales as well
+      \end{itemize}
+      \begin{block}{The condition}
+        \small
+        You need a \key{fast interconnect}, meaning NVLink inside a node. Over
+        Ethernet it is usually a net loss, because the all-reduce sits on the
+        critical path of every decode step.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \source{Shoeybi et al., \textit{Megatron-LM}, 2019;
+    Pope et al., \textit{Efficiently Scaling Transformer Inference}, MLSys 2023.}
+  \note{Contrast with week 2 deliberately: in training, communication can hide
+  behind a large batch's compute. In decode there is almost no compute to hide
+  behind, so the all-reduce is naked latency, twice per layer, on every token.
+  That is why interconnect quality decides whether tensor parallelism helps at
+  all.
+
+  Say the upside out loud, because it is no longer on the slide: tensor
+  parallelism is the only option here that reduces per-token \emph{latency},
+  because it divides the bytes each GPU has to read. Two GPUs, half the weights
+  each, roughly half the TPOT.
+
+  Roihu nodes have four GH200s with a fast interconnect, so a student who
+  genuinely needed it could use TP=2. Nobody on this course will.}
+\end{frame}
+
+\begin{frame}{Pipeline parallelism and the bubble}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.5\textwidth}
+      Split the model \emph{by layer}: GPU 0 holds layers 1--18, GPU 1 holds
+      19--36. Activations are passed forward once per stage.
+      \begin{itemize}\small
+        \item communication is tiny: one activation tensor rather than an
+          all-reduce
+        \item works over commodity interconnect
+        \item memory scales with the number of stages
+      \end{itemize}
+      \vspace{0.4em}
+      \key{But:} with one request in flight, stage 1 is idle while stage 0
+      works. That idleness is the \textbf{bubble}.
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \centering
+      \begin{tikzpicture}[x=0.82mm, y=1mm, font=\tiny]
+        \draw[UHGrey, ->] (0,-4) -- (62,-4) node[lbl, anchor=west] {time};
+        \node[lbl, anchor=east] at (-2,13) {stage 0};
+        \node[lbl, anchor=east] at (-2,4) {stage 1};
+        \foreach \i in {0,1,2,3} {
+          \fill[UHBlue!35, draw=UHBlue] ({\i*14},10) rectangle ({\i*14+12},16);
+          \fill[UHOrange!25, draw=UHOrange] ({\i*14+14},1) rectangle ({\i*14+26},7);
+        }
+        \fill[UHGrey!20, draw=UHGrey!40] (0,1) rectangle (12,7);
+        \node[text=UHGrey] at (6,4) {bubble};
+      \end{tikzpicture}
+
+      \vspace{0.6em}
+      \raggedright\small
+      The fix is the same as in training: keep many micro-batches in flight.
+      In serving, continuous batching supplies them for free, as long as there
+      is enough traffic.
+    \end{column}
+  \end{columns}
+  \vspace{0.5em}
+  \centering
+  \small
+  Rule of thumb: \key{tensor parallel inside a node, pipeline parallel between
+  nodes.}
+  \note{The comparison to make is communication volume against idle time.
+  Tensor parallelism communicates a lot but keeps every GPU busy, while
+  pipeline parallelism barely communicates and then wastes time whenever load
+  is low. Which you prefer depends on your interconnect and your traffic.
+
+  The serving-specific point is the nice one: in training you have to
+  manufacture micro-batches to fill the pipeline, whereas a busy inference
+  server already has a queue of independent requests. Pipeline parallelism
+  therefore behaves much better under load than at low load, which is the
+  opposite of the intuition most people bring.
+
+  The rule of thumb at the bottom is what production systems actually do, and
+  it follows directly from where the fast links are.}
+\end{frame}
+
+\begin{frame}{Expert parallelism, for MoE}
+  \begin{columns}[T]
+    \begin{column}{0.54\textwidth}
+      An MoE model's parameters are mostly experts, and at inference only
+      top-$k$ of them run per token. Putting \emph{different experts on
+      different GPUs} is the natural split.
+      \vspace{0.5em}
+
+      The communication pattern is an \key{all-to-all}: every GPU sends each
+      token to whichever GPUs hold its chosen experts, then collects the
+      results back.
+      \vspace{0.5em}
+
+      \textbf{Load balance turns into a serving problem too.} If a batch's
+      routing happens to favour a few experts, the GPUs holding them become
+      the critical path and the rest wait.
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{block}{Why total parameters still matter}
+        \small
+        Qwen3-Next 80B-A3B activates 3B parameters per token, but you still
+        have to \emph{hold} all 80B. At bf16 that is 160\,GB, so it does not
+        fit on one GH200 at any batch size.
+        \vspace{0.3em}
+        \key{You get 3B speed on 80B worth of hardware.} That is week 1's
+        gotcha with a price attached.
+      \end{block}
+      \vspace{0.2em}
+      \small
+      It is also why some 2026 teams deliberately chose \emph{coarser}
+      experts: fewer and larger experts mean less routing overhead and simpler
+      placement.
+    \end{column}
+  \end{columns}
+  \source{Raschka, \textit{A Dream of Spring for Open-Weight LLMs}, Feb 2026,
+    on MoE granularity; DeepSeek V3 technical report on expert parallel
+    deployment.}
+  \note{Reconnect to the week 1 MoE gotcha explicitly. Counting active
+  parameters tells you about speed and nothing at all about memory, and here
+  is what that costs in euros: an 80B-A3B model runs at the speed of a 3B
+  model while taking up the room of an 80B one, and you pay for both of those
+  properties separately.
+
+  The load-balance point surprises people who have only read the training
+  literature. Auxiliary load-balancing losses shape the \emph{average} over a
+  run, but a single live batch can still be badly skewed, and then the busiest
+  expert sets your tail latency.
+
+  Keep this brief, since nobody in the room will serve an MoE this term. It is
+  context for reading deployment reports.}
+\end{frame}
+
+\begin{frame}{Disaggregated prefill and decode}
+  \centering
+  \begin{tikzpicture}[x=0.9mm, y=1mm, font=\scriptsize]
+    \node[modmute] (req) at (-4,10) {requests};
+    % prefill pool
+    \draw[draw=UHBlue, fill=UHBlue!8, rounded corners=2pt] (18,0) rectangle (52,22);
+    \node[lbl, anchor=south] at (35,22.5) {prefill pool: limited by arithmetic};
+    \node[mod, minimum width=12mm] at (27,15) {GPU};
+    \node[mod, minimum width=12mm] at (43,15) {GPU};
+    \node[lbl] at (35,5) {big matmuls, FP8, high MFU};
+    % decode pool
+    \draw[draw=UHOrange, fill=UHOrange!8, rounded corners=2pt] (74,0) rectangle (116,22);
+    \node[lbl, anchor=south] at (95,22.5) {decode pool: limited by bandwidth};
+    \node[mod, minimum width=11mm] at (82,15) {GPU};
+    \node[mod, minimum width=11mm] at (95,15) {GPU};
+    \node[mod, minimum width=11mm] at (108,15) {GPU};
+    \node[lbl] at (95,5) {huge KV pool, large batches};
+    % arrows
+    \draw[flow] (req) -- (17,10);
+    \draw[flowhi] (52,11) -- (73,11);
+    \node[lbl, anchor=south, text=UHOrange] at (62.5,12) {KV transfer};
+    \node[lbl, anchor=north] at (62.5,9) {NVLink / RDMA};
+    \draw[flow] (116,11) -- (128,11);
+    \node[lbl, anchor=west] at (128,11) {tokens};
+  \end{tikzpicture}
+
+  \vspace{1.0em}
+  \raggedright
+  \begin{columns}[T]
+    \begin{column}{0.54\textwidth}
+      \small
+      Two phases with opposite bottlenecks were sharing one pool and
+      interfering with each other. Separate them and you can:
+      \begin{itemize}
+        \item size each pool independently for its actual load
+        \item tune parallelism and even \emph{hardware} per phase
+        \item stop long prefills from touching anyone's TPOT at all
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{block}{The cost}
+        \small
+        The KV cache for the whole prompt must cross the wire before decoding
+        starts. That is tens to hundreds of megabytes per request, which is why
+        this needs NVLink or RDMA and why it only pays at scale.
+      \end{block}
+    \end{column}
+    \end{columns}
+  \source{Zhong et al., \textit{DistServe}, OSDI 2024; now supported in vLLM
+    and SGLang.}
+  \note{This is how large deployments are built now, and it follows from
+  section 2. Prefill saturates the arithmetic units while decode spends its
+  time waiting on memory, so putting both on the same machines guarantees that
+  one of them is wasting whatever the other needs.
+
+  The forward-looking consequence is more interesting. Once the phases are
+  separated there is no reason they need the same \emph{kind} of GPU: a
+  prefill box wants FLOPs more than memory, and a decode box wants the
+  opposite. Expect the hardware to diverge.
+
+  Say clearly that this is well beyond anything they will do on Roihu. It is
+  here so they can read a serving architecture diagram and know what they are
+  looking at.}
+\end{frame}
+\fi
+
+% Engine catalogues change quickly; the lab uses vLLM and the reading version
+% retains the comparison.
+\iffalse
+\begin{frame}[shrink=19]{Four serving engines and what each is for}
+  \centering
+  \footnotesize
+  \begin{tabular}{@{}L{2.2cm} L{4.4cm} L{4.6cm}@{}}
+    \toprule
+    \textbf{Engine} & \textbf{Good at} & \textbf{Choose it when}\\
+    \midrule
+    \textbf{vLLM} & PagedAttention, continuous batching, huge model coverage,
+      OpenAI-compatible API, LoRA adapters served live &
+      default for research and for most production; \textbf{this course}\\[0.3em]
+    \textbf{SGLang} & RadixAttention prefix reuse, structured and multi-call
+      programs, deterministic-inference mode &
+      agent loops, heavy prefix sharing, reproducibility\\[0.3em]
+    \textbf{TensorRT-LLM} & compiled kernels, the best raw numbers on NVIDIA
+      hardware &
+      a fixed model you will serve for months and can afford to compile\\[0.3em]
+    \textbf{llama.cpp / Ollama} & CPU and consumer GPUs, GGUF, aggressive
+      low-bit quantisation, single-user &
+      a laptop, an edge device, a demo\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.8em}
+  \raggedright
+  \begin{block}{Caveat worth carrying out of this course}
+    \small
+    Engine support is not uniform across architectures. Classic GQA models have
+    years of tuned kernels behind them, and the hybrid, linear and sparse
+    attention models usually have very few. \key{In late 2026, a model that is
+    cheaper on paper can still be slower in your stack.} Benchmark the model
+    and the engine together rather than the model alone.
+  \end{block}
+  \note{The honest summary of the field is that vLLM and SGLang keep absorbing
+  each other's features, so the distinction narrows with every release. Pick on
+  ecosystem fit rather than on a benchmark from six months ago.
+
+  llama.cpp is on the slide for a reason that has nothing to do with
+  performance. It is how most people outside this room actually run a local
+  model, and GGUF plus Ollama is what their non-specialist colleagues will ask
+  them about.
+
+  The caveat block is the practitioner's point from the course outline, and it
+  generalises. A paper FLOP count is a prediction and the kernels are what you
+  actually get, and most disappointment in this area lives in that gap. It is
+  also why I would still default to a boring GQA model for a deployment I had
+  to support.}
+\end{frame}
+
+\fi
+\begin{frame}{Cost per million tokens, from first principles}
+  \small
+  \[
+    \text{EUR per million tokens} \;=\;
+    \frac{\text{EUR per GPU-hour}}{\text{tokens you got out of that hour}}
+    \times 10^{6}
+  \]
+  \emph{In words:} you rent the card by the hour, so divide the rent by what
+  the hour produced. Rent is EUR 2.50/h and the card is busy only 40\% of the
+  time (its \key{utilisation}), so everything divides by 0.4 at the end.
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{32 users at once, measured 2{,}500 tokens/s:}
+      \begin{itemize}
+        \item $2500 \times 3600 = 9$ million tokens an hour
+        \item EUR 2.50 for 9 million $=$ EUR 0.28 per million
+        \item busy only 40\% of the time: \key{EUR 0.69 per million}
+      \end{itemize}
+      \textbf{One user, measured 120 tokens/s:} 0.43 million tokens an hour,
+      the same arithmetic, \key{EUR 14.5 per million}.
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{The same GPU, the same model, $21\times$ the price}
+        \small
+        Nothing changed except how many requests were in flight. Batch size is
+        the dominant term in your unit economics.
+      \end{block}
+      \vspace{0.3em}
+
+      Public prices in late 2026: roughly \$0.02--0.10 per million output
+      tokens for hosted 4B-class open models, \$5--15 for frontier ones.
+    \end{column}
+  \end{columns}
+  \source{GPU price: representative on-demand H100/GH200 cloud rate, late 2026.
+    Throughput: the kind of figure Thursday's lab produces. API prices: public
+    price lists, November 2026 --- \textbf{these rot fast}.}
+  \note{Do this arithmetic on the board. It is four numbers and a division, and
+  it is probably the most immediately employable thing in the lecture. The
+  general form, with $u$ for utilisation, is
+  EUR per $10^{6}$ tokens $=$ (EUR per GPU-hour) / (tokens/s $\times$ 3600
+  $\times\ u$) $\times\ 10^{6}$; the single-user case is
+  $2.50 / 4.32\times10^{5} \times 10^{6} \div 0.4 \approx 14.5$.
+
+  The $21\times$ is the punchline and it reframes everything before it:
+  sections 3 and 4 were all about moving from the second calculation to the
+  first.
+
+  Two framings that used to be on the slide and are worth saying anyway. The
+  gap between your number and a provider's is utilisation and batch size
+  rather than some secret they have, and batching is not a performance detail
+  at the margin: it is the largest term in the whole calculation.
+
+  Be precise about the utilisation factor, because people leave it out and then
+  wonder why their estimate is optimistic. You pay for the GPU every hour it is
+  allocated, including the nights and the idle afternoons. A 40\% duty cycle is
+  realistic for a service with human traffic; a batch job can approach 100\%
+  and is correspondingly cheap.
+
+  Date the API prices out loud and say they will be wrong by spring.}
+\end{frame}
+
+\begin{frame}{Buying hardware for a decode-heavy workload}
+  \centering
+  \begin{tabular}{@{}L{3.6cm} R{2.4cm} R{2.4cm} R{2.4cm}@{}}
+    \toprule
+    & \textbf{bf16 TFLOP/s} & \textbf{bandwidth} & \textbf{memory}\\
+    \midrule
+    GH200 (96\,GiB, HBM3)  & $\approx$ 990 & 4.0\,TB/s & 96\,GiB\\
+    GH200 (144\,GB, HBM3e) & $\approx$ 990 & 4.9\,TB/s & 144\,GB\\
+    A100 80\,GB            & $\approx$ 312 & 2.0\,TB/s & 80\,GB\\
+    L40S                   & $\approx$ 362 & 0.86\,TB/s & 48\,GB\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.4em}
+  \raggedright
+  \small
+  Compute and bandwidth are the two halves of the roofline. The L40S has more
+  advertised arithmetic than an A100 but less than half its memory bandwidth.
+  A decode-heavy workload can therefore run faster on the A100.
+  \vfill
+  \begin{takeaway}
+    For a decode-heavy workload, compare \key{bandwidth per euro} and memory
+    capacity, not only peak arithmetic.
+  \end{takeaway}
+  \note{Clock check: should be around 17:34.
+
+  The A100-versus-L40S comparison is the whole slide. It is a concrete case
+  where the number everyone quotes gives you the wrong answer. Ask the room
+  which they would buy before showing the last line.
+
+  Tie it back to the first-principles formula from section 2: tokens per second
+  is bandwidth divided by bytes per token, so for a single stream bandwidth
+  is a useful first predictor of throughput. Everything else is a correction
+  term.}
+\end{frame}
+
+% =====================================================================
+\section{Research hook: deterministic inference}
+% =====================================================================
+
+% This case study is useful reading but too specialised for the core
+% 90-minute inference overview.
+\iffalse
+\begin{frame}[shrink=18]{The demonstration}
+  Set \texttt{temperature=0}, \texttt{seed=0}, the same prompt, the same
+  server, the same weights.
+  \vspace{0.6em}
+  \centering
+  \begin{tabular}{@{}L{6.2cm} L{5.0cm}@{}}
+    \toprule
+    \textbf{Experiment} & \textbf{Result}\\
+    \midrule
+    Send the prompt twice, alone, back to back &
+      \good{bitwise identical}\\[0.3em]
+    Send it alone, then send it inside a batch of 64 &
+      \bad{different output}\\[0.3em]
+    Send it 1{,}000 times under live traffic &
+      \bad{many distinct completions}\\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.8em}
+  \raggedright
+  A published run of this experiment: 1{,}000 completions of 1{,}000 tokens
+  each from one model at temperature 0 produced \key{80 distinct completions},
+  with the first divergence typically around the \key{103rd token}.
+  \vspace{0.6em}
+  \begin{gotcha}[Temperature 0 is not deterministic]
+    And the cause is \textbf{not} GPU randomness, \textbf{not} a missing seed,
+    and \textbf{not} your sampler. It is \key{who else was in your batch}.
+  \end{gotcha}
+  \source{Thinking Machines Lab, \textit{Defeating Nondeterminism in LLM
+    Inference}, September 2025.}
+  \note{Clock check: should be around 17:34--17:35 here. Ten minutes left, and
+  this section is worth every one of them.
+
+  Run the demonstration as a story, not as a slide. Everyone in the room
+  believes temperature 0 means argmax means deterministic, because that is what
+  the maths says. Row one confirms their belief. Row two destroys it.
+
+  Then kill the three wrong explanations immediately and by name, because
+  otherwise people spend the next five minutes privately theorising about
+  \texttt{atomicAdd} and cosmic rays. The seed is irrelevant: at temperature 0
+  nothing is sampled. GPU atomics are a real source of run-to-run
+  nondeterminism in \emph{training}, but they are not what is happening here,
+  and a forward pass run twice on identical inputs really is reproducible.
+
+  The number, 80 distinct completions out of 1{,}000, is public and citable.
+  Use it, because it makes the problem feel like engineering rather than
+  folklore.}
+\end{frame}
+
+\begin{frame}[shrink=5]{Floating-point addition is not associative}
+  In IEEE double precision:
+  \[
+    (0.1 + 0.2) + 0.3 = 0.6000000000000001
+    \quad\neq\quad
+    0.1 + (0.2 + 0.3) = 0.6
+  \]
+  \vspace{-0.4em}
+  \begin{columns}[T]
+    \begin{column}{0.54\textwidth}
+      Each addition rounds to the nearest representable value, so the rounding
+      error depends on \key{the order in which you add}. Add the same numbers
+      in a different order and you get a slightly different sum.
+      \vspace{0.5em}
+
+      And we are not even in double precision. A bf16 number keeps only
+      \key{8 bits of precision}, so each rounding step is about 0.4\% of the
+      value, against roughly one part in $10^{16}$ for a double. It is the
+      same effect, about thirteen orders of magnitude larger.
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{block}{From one bit to a different answer}
+        \small
+        A change in summation order perturbs a token's score in its last bits.
+        \vspace{0.3em}
+        That changes \emph{which} token is top only when two candidates are
+        nearly tied, which is rare per token, \textbf{but you generate
+        thousands of tokens}.
+        \vspace{0.3em}
+        One flip, and every token after it is conditioned on a different
+        prefix. \key{The two generations fork rather than drifting apart.}
+      \end{block}
+    \end{column}
+  \end{columns}
+  \vspace{0.3em}
+  \centering
+  \small
+  Nothing here is random. Every run is deterministic \emph{given the order in
+  which the additions happened}.
+  \note{Precisely: bf16 keeps 8 significand bits, so its relative rounding step
+  is about $2^{-8} \approx 0.4\%$, against $2^{-53}$ for an IEEE double.
+  ``Which token is top'' is the $\arg\max$ over the logits.
+
+  The 0.1/0.2/0.3 example is worth typing into a Python prompt live if the
+  projector allows. It takes ten seconds and it is far more convincing than a
+  slide.
+
+  The conceptual move to land is in the last line. None of this is
+  nondeterminism in the probabilistic sense. Every kernel is a deterministic
+  function of its inputs \emph{and of how it was scheduled}. What changes is
+  the scheduling, and that is the thing we are not controlling.
+
+  The fork metaphor matters because it explains why the divergence is so
+  visible. Models do not drift apart slowly. One token differs, and from then
+  on the two generations are conditioned on different text, so they can end up
+  saying opposite things.}
+\end{frame}
+
+\begin{frame}[shrink=18]{Where the summation order comes from}
+  \centering
+  \begin{tikzpicture}[x=1mm, y=1mm, font=\scriptsize]
+    \node[lbl, anchor=east] at (-2,22) {batch of 1};
+    \foreach \i in {0,...,7}
+      \node[tokcell, minimum width=6mm] at ({6+\i*8},22) {};
+    \draw[decorate, decoration={brace, amplitude=3pt}, UHBlue, thick]
+      (3,27) -- (69,27);
+    \node[lbl, anchor=south, text=UHBlue] at (36,28) {8 numbers to add, done in 2 pieces};
+
+    \node[lbl, anchor=east] at (-2,6) {batch of 64};
+    \foreach \i in {0,...,7}
+      \node[tokcell, minimum width=6mm, fill=UHOrange!15] at ({6+\i*8},6) {};
+    \draw[decorate, decoration={brace, amplitude=3pt}, UHOrange, thick]
+      (3,11) -- (69,11);
+    \node[lbl, anchor=south, text=UHOrange] at (36,12)
+      {the same 8 numbers, now in 4 pieces, so different partial sums};
+  \end{tikzpicture}
+
+  \vspace{1.2em}
+  \raggedright
+  To add up a long list of numbers fast, a GPU chops it into pieces, adds each
+  piece separately, then adds the pieces. \key{How many pieces} is chosen at
+  run time from the shape of the work, and that shape includes everyone else's
+  requests:
+  \begin{itemize}\small
+    \item \key{matrix multiply}: the chunking is picked from the batch size, so
+      a different batch size gives a different chunking and a different order
+      of additions
+    \item \key{attention}: the standard fast kernel splits the cache into a
+      \emph{fixed number} of pieces, computed from the batch and the sequence
+      length, so both change the order
+    \item \key{chunked prefill and prefix caching} change how much of the
+      sequence is processed in one pass, so a \textbf{cache hit can change
+      your output}
+  \end{itemize}
+  \key{Your token scores depend on other users' requests.}
+  \source{Thinking Machines Lab, Sept 2025; FlashAttention / FlashDecoding
+    split-KV scheduling, Dao et al. 2022--2023.}
+  \note{This is the technical core of the section. Go slowly. The proper names
+  for the three bullets: matmul tile sizes and split-K factors chosen from the
+  batch dimension; FlashDecoding's split-KV, which divides the reduction over
+  the KV length into a fixed number of chunks; and scheduler-level effects
+  from chunked prefill and prefix caching.
+
+  The split-K and split-KV detail is the one that makes it click. These kernels
+  choose \emph{how many} parallel chunks to split a reduction into so as to
+  keep all the streaming multiprocessors busy. With one sequence in flight
+  there is little work, so they split aggressively to fill the GPU. With
+  sixty-four there is plenty of work, so they split less. Either choice is
+  correct and fast, and they produce different last bits.
+
+  The third bullet connects back to today's own lecture and usually gets a
+  reaction: prefix caching, which I recommended two sections ago as a free win
+  with no quality cost, changes your output bits. Enjoy that tension. It is
+  honest, and it is the sort of interaction that only shows up once you have
+  built the system.}
+\end{frame}
+
+\begin{frame}[shrink=19]{A better name for the problem: batch invariance}
+  \begin{block}{Definition}
+    A kernel is \key{batch-invariant} if the result computed for a given
+    request is \textbf{bitwise identical} regardless of the size and
+    composition of the batch it was executed in, and regardless of how the
+    work was split.
+  \end{block}
+  \vspace{0.5em}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{Why this framing is better.}
+      \begin{itemize}\small
+        \item ``GPU nondeterminism'' suggests randomness. There is none.
+        \item ``Set a seed'' fixes nothing, because nothing is being sampled.
+        \item ``Run-to-run reproducibility'' aims at the wrong thing. The
+          server already has it \emph{at fixed batch composition}.
+      \end{itemize}
+      \vspace{0.4em}
+      What you want is invariance to a variable nobody ever meant to be an
+      input.
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{Three kernels have to change}
+        \small
+        \textbf{RMSNorm}: fix the reduction strategy instead of choosing it
+        from the batch size.\\[0.3em]
+        \textbf{Matmul}: fix the tile and split-K configuration so the kernel
+        selector cannot pick one per shape.\\[0.3em]
+        \textbf{Attention} is the hard one. Split the KV reduction into chunks
+        of \key{fixed size} rather than a fixed \emph{number}, so the
+        summation tree does not depend on sequence length or batch.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \source{Thinking Machines Lab, \textit{Defeating Nondeterminism in LLM
+    Inference}, Sept 2025.}
+  \note{Naming the property correctly is most of the contribution here, and
+  there is a transferable research lesson in that. If you frame the problem as
+  ``the GPU is flaky'' there is nothing to do about it. Frame it as ``this
+  function has an argument nobody declared'' and the fix is obvious.
+
+  The fixed-size versus fixed-count distinction in the attention bullet is the
+  key engineering idea. A fixed \emph{number} of splits adapts to load and runs
+  faster. A fixed chunk \emph{size} means a given sequence is always summed the
+  same way, whatever else is on the GPU, and you give up some speed for that.
+
+  If anyone asks why this was not built in from the start: nobody was asking
+  for it, and the adaptive version is genuinely faster. It was a reasonable
+  default that became a problem once people started doing RL with these
+  servers.}
+\end{frame}
+
+\begin{frame}[fragile,shrink=8]{Making it real, and what it costs}
+\begin{lstlisting}[language=slurm]
+python -m sglang.launch_server \
+  --model-path Qwen/Qwen3.5-4B-Instruct \
+  --enable-deterministic-inference \
+  --attention-backend flashinfer
+\end{lstlisting}
+  \vspace{0.4em}
+  \begin{columns}[T]
+    \begin{column}{0.54\textwidth}
+      \small
+      What a deterministic mode has to do:
+      \begin{itemize}
+        \item pin batch-invariant kernels for RMSNorm, the linear layers and
+          attention
+        \item make the attention backend's KV splitting independent of batch
+          and sequence length
+        \item keep the \emph{scheduler} from changing what a request sees, so
+          chunked prefill boundaries and prefix-cache hits do not alter the
+          computation
+      \end{itemize}
+      \vspace{0.3em}
+      That last point is what makes this a serving-systems problem rather than
+      a kernel problem.
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{block}{The price}
+        \small
+        Published baseline for the first implementation: a benchmark that took
+        \textbf{26\,s} unmodified took \textbf{55\,s} with naive deterministic
+        kernels, improving to \textbf{42\,s} once attention was done properly.
+        That is roughly a \key{$1.6\times$} cost.
+        \vspace{0.3em}
+        Engine work since then has been about closing that gap. The honest
+        answer today is tens of percent, depending on backend and batch size,
+        and nobody should tell you it is free.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \sources{Thinking Machines Lab, Sept 2025, for the published timings;
+    SGLang deterministic-inference support. Figures are backend- and
+    workload-dependent, so measure your own.}
+  \note{This is my own area, so be concrete and be careful in equal measure.
+
+  The honest status: the kernel side is now well understood and mostly a
+  matter of discipline. The interesting remaining work is on the scheduler
+  side, making the guarantee survive chunked prefill, prefix caching,
+  speculative decoding and multi-GPU reductions. All of those exist to go fast
+  by adapting to load, which is exactly what we are now forbidding.
+
+  Be explicit about the cost and do not round it away. Anyone who tells you
+  determinism is free has not measured it under load. For practitioners the
+  useful framing is that it is a \emph{mode} you turn on for evaluation,
+  debugging and RL rollouts, and leave off when you are serving users who do
+  not care.
+
+  Do not overclaim my role. Say ``this is the line of work I am involved in''
+  and credit the originating analysis.}
+\end{frame}
+
+\begin{frame}[shrink=7]{Why anyone should care}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \textbf{1. Reproducible evaluation.}
+      A score measured on a server under load can move when you repeat it on a
+      quiet afternoon. Is that a regression, or did the numerical execution
+      change?
+      \vspace{0.5em}
+
+      \textbf{2. Debugging.}
+      You cannot bisect a failure you cannot reproduce. A bad generation that
+      only happens under load is nearly impossible to chase.
+      \vspace{0.5em}
+
+      \textbf{3. Reinforcement learning}, which is where the problem stops
+      being an annoyance and starts breaking the algorithm.
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{block}{Back to week 2}
+        \small
+        In GRPO you generate rollouts with an \key{inference engine} and
+        compute the policy gradient with a \key{training engine}. The update
+        assumes the log-probs match.
+        \vspace{0.3em}
+        They do not, partly for the reasons on the last three slides, so the
+        RL you believed was on-policy is quietly off-policy.
+        \vspace{0.3em}
+        L3's fix was \key{truncated importance sampling}, multiplying the loss
+        by a clipped ratio to correct the mismatch \cit{Yao et al. 2025}.
+        \vspace{0.3em}
+        \key{Batch-invariant kernels attack the same problem at the source.}
+        If the engines agree bitwise you do not need the correction term, and
+        the rollouts really are on-policy.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \source{Yao et al. 2025 (truncated importance sampling), as covered in
+    Lecture 3; adopted in Olmo 3's GRPO recipe.}
+  \note{Land the three reasons in ascending order of seriousness and spend most
+  of the time on the third.
+
+  The RL connection is the payoff for the whole course structure, so make the
+  link explicit. In week 2 I presented truncated importance sampling as one
+  trick on a list of GRPO engineering fixes, justified in a line by
+  ``inference-engine and training-engine log-probs differ''. Today they know
+  why they differ.
+
+  Say the deeper point slowly: a numerical detail in a matmul kernel changes
+  the mathematical character of an RL algorithm. You cannot treat systems and
+  algorithms as separate layers here, and that is a good reason for an NLP
+  master's student to care about kernels.
+
+  Note the DeepSeek V3.2 parallel if there is time. They log the MoE routing
+  during rollout and force the same routing during training, which is the same
+  instinct applied to a different mismatch.}
+\end{frame}
+
+\begin{frame}{Your turn: the Lab 3 bonus}
+  \begin{columns}[T]
+    \begin{column}{0.54\textwidth}
+      \textbf{The experiment.}
+      \begin{enumerate}\small
+        \item Pick 50 prompts from your task.
+        \item Send them at \texttt{temperature=0}, one at a time, and store the
+          outputs.
+        \item Send the same 50 again as a single large concurrent batch.
+        \item \key{Count how many differ.} Find the first differing token
+          position in each pair.
+      \end{enumerate}
+      \vspace{0.5em}
+      \small
+      Then the interesting follow-up: does the disagreement rate change with
+      the \emph{length} of the output? With the batch size? With prefix
+      caching on or off?
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{block}{What to write in the report}
+        \small
+        The count, the first-divergence positions, and one paragraph on what
+        this implies for the evaluation numbers you report in weeks 3 and 4.
+      \end{block}
+      \vspace{0.3em}
+      \begin{block}{Prediction to test}
+        \small
+        Short, confident outputs will mostly agree, and long generations and
+        reasoning traces will not. If your task produces single-label answers
+        you may see zero differences, which is a result too and tells you
+        something about your margin.
+      \end{block}
+    \end{column}
+  \end{columns}
+  \vfill
+  \centering
+  \small
+  You will believe this once you have measured it yourself, and not before.
+  \note{Clock check: should be around 17:42.
+
+  Sell this as the most genuinely fun thing in the lab. It takes twenty lines
+  of code, it produces a surprising result, and it is a real open-ish problem
+  rather than a reproduction exercise.
+
+  Manage expectations honestly: students doing single-label classification may
+  well see zero differences, because the margin between the top two logits is
+  large. That is a good outcome and they should say so --- and then try it with
+  a longer free-text prompt to see the effect.
+
+  Encourage the follow-up questions in the small print. Anyone who plots
+  disagreement rate against output length has done a small piece of genuine
+  empirical work.}
+\end{frame}
+\fi
+
+% =====================================================================
+\iffalse
+\begin{frame}[standout]
+  Three things to remember
+  \note{Pause here. Everything after this slide is summary, so this is the
+  moment to stop adding information and start consolidating. Ask them to close
+  laptops for ninety seconds. If the room is still with you, ask one person to
+  name something they will change about how they run a model. The answers tell
+  you which section landed.}
+\end{frame}
+\fi
+
+\begin{frame}{Three things to remember}
+  \begin{enumerate}
+    \item \key{The two halves of a request hit different limits.} Prefill
+      brings more arithmetic than the card can do at once, while decode
+      finishes its arithmetic long before the weights have finished arriving.
+      Find out which half you are paying for before you optimise, and
+      remember that INT4 helps one of them and can hurt the other.
+      \vspace{0.6em}
+    \item \key{The KV cache often sets the concurrency limit.}
+      In our worked example, eight gigabytes hold the weights and most of the
+      remaining card is available to the cache. Paging, prefix reuse and
+      quantisation all reduce pressure on that budget.
+      \vspace{0.6em}
+    \item \key{Measure latency and quality together.}
+      Warm up the server, separate TTFT from TPOT, sweep concurrency, and
+      report p50 and p95. A faster configuration is only useful if its output
+      quality remains acceptable for the task.
+  \end{enumerate}
+  \vfill
+  \textbf{Thursday:} you serve a model, measure it, quantise it, and
+  find out how close today's estimates were.
+  \note{These three sentences are reused verbatim in the week 7 wrap-up, so say
+  them cleanly and do not improvise.
+
+  If you are short of time, the one that must be said is number two, because it
+  is the one that changes how they size a deployment. Number one is the
+  explanation and number three is the memorable one.
+
+  Then take thirty seconds on the hand-off slide. The restart script matters
+  more to weeks 5 and 6 than anything else they will do on Thursday.}
+\end{frame}
+
+\begin{frame}{A server configuration you can reuse}
+  \begin{columns}[T]
+    \begin{column}{0.54\textwidth}
+      If the same endpoint suits your project, it can become
+      \key{infrastructure for later labs}:
+      \vspace{0.4em}
+      \begin{itemize}\small
+        \item \textbf{Week 5, Dmitry's RAG lab}: your vLLM server is the
+          \emph{generator} that retrieval feeds.
+        \item \textbf{Week 6, the agent lab}: the same endpoint, now driving
+          a tool-calling loop with many short calls, so TTFT and prefix caching
+          suddenly matter a lot.
+        \item \textbf{Week 7}: your demo runs against it.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{block}{The file worth keeping}
+        \small
+        \key{A one-command restart script in your repository.}
+        \vspace{0.3em}
+        Model path, LoRA adapter, \texttt{max-model-len},
+        \texttt{max-num-seqs}, prefix caching and port, all of it in a file,
+        so that in two weeks you type one line and the server you tuned today
+        comes back exactly as it was.
+      \end{block}
+      \vspace{0.2em}
+      \small
+      The complete measurement workflow is in
+      \texttt{lab3-example/README.md}.
+
+      \warn{Every year someone loses an hour of week 5 rebuilding a server
+      command from memory.} Do not be that person.
+    \end{column}
+  \end{columns}
+  \vfill
+  \centering
+  \small
+  GPU etiquette, again: the endpoint holds its KV pool whether or not you are
+  using it. Shut it down when you leave.
+  \note{Be firm about the script. It is one file and it takes two minutes,
+  and without it week 5 starts with debugging instead of retrieval.
+
+  Point out the week 6 detail, because an agent is a genuinely different
+  serving regime: many short calls with a long shared prefix, which is the
+  exact workload prefix caching was designed for. Their server configuration
+  from Thursday may not be the right one for week 6, and noticing that is a
+  good report paragraph.
+
+  Final line, final thirty seconds: shut the server down. Then stop talking.}
+\end{frame}
+
+\appendix
+
+\begin{frame}{Reading}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{Serving systems}
+      \begin{itemize}\footnotesize
+        \item Kwon et al. 2023, \textit{PagedAttention} (vLLM)
+        \item Yu et al. 2022, \textit{Orca}, continuous batching
+        \item Agrawal et al. 2024, \textit{Sarathi-Serve}
+        \item Zhong et al. 2024, \textit{DistServe}
+        \item Zheng et al. 2024, \textit{SGLang} / RadixAttention
+        \item Pope et al. 2023, \textit{Efficiently Scaling Transformer
+          Inference}
+      \end{itemize}
+      \vspace{0.3em}
+      \textbf{Kernels}
+      \begin{itemize}\footnotesize
+        \item Dao et al. 2022, Dao 2023, \textit{FlashAttention} 1 and 2
+        \item Williams et al. 2009, the roofline model
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \textbf{Decoding}
+      \begin{itemize}\footnotesize
+        \item Leviathan et al. 2023, speculative decoding
+        \item Chen et al. 2023, speculative sampling
+        \item Cai et al. 2024, \textit{Medusa}; Li et al. 2024, \textit{EAGLE}
+        \item Willard \& Louf 2023, \textit{Outlines}; Dong et al. 2024,
+          \textit{XGrammar}
+      \end{itemize}
+      \vspace{0.3em}
+      \textbf{Quantisation}
+      \begin{itemize}\footnotesize
+        \item Frantar et al. 2023, \textit{GPTQ}; Lin et al. 2024, \textit{AWQ}
+        \item Hooper et al. 2024, \textit{KVQuant}
+      \end{itemize}
+      \vspace{0.3em}
+      \textbf{Determinism}
+      \begin{itemize}\footnotesize
+        \item Thinking Machines Lab 2025, \textit{Defeating Nondeterminism
+          in LLM Inference}
+        \item SGLang deterministic-inference docs and issues
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \note{Venues, since the slide no longer has room for them: PagedAttention is
+  SOSP 2023, Orca is OSDI 2022, Sarathi-Serve and DistServe are OSDI 2024,
+  speculative decoding is ICML 2023, and Chen et al. is the DeepMind
+  speculative-sampling report. The roofline paper is CACM 2009.
+
+  If they only read three, say these. The vLLM paper, because it is the
+  clearest systems paper in the area and the ideas come straight out of
+  operating systems. The speculative decoding paper, for the proof, which is
+  short and elegant. And the nondeterminism post, because it shows how to
+  diagnose a problem everybody had learned to live with.
+
+  For anyone who wants to work on this, the SGLang issue tracker is where the
+  determinism discussion actually happens, and it is a realistic entry point
+  for a thesis project. Say that I am happy to talk.}
+\end{frame}
+
+\end{document}

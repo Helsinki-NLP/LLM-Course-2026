@@ -1,0 +1,20 @@
+Helsinki on Suomen pääkaupunki ja maan suurin kaupunki.
+Suomen kielessä sanoihin voidaan liittää useita päätteitä.
+Kielimalli ennustaa seuraavaa tekstiyksikköä aiemman tekstin perusteella.
+Tokenisointi muuttaa tekstin kokonaisluvuiksi ennen mallin käsittelyä.
+Pieni malli sopii hyvin ohjelmakoodin ja mittausmenetelmän testaamiseen.
+Harjoituksessa sama koe suoritetaan kolmella eri mallikoolla.
+Validointihäviö kertoo, miten malli ennustaa tekstiä, jota se ei nähnyt opetuksessa.
+Tulokset tallennetaan tiedostoon, jotta koe voidaan myöhemmin toistaa.
+Satunnaissiemen pidetään samana kaikissa vertailtavissa ajoissa.
+Suurempi sanasto lyhentää jonoja mutta kasvattaa upotuskerroksen kokoa.
+Huolellinen vertailu muuttaa vain yhden asian kerrallaan.
+Opetusaineisto jaetaan erillisiin opetus- ja validointiosiin.
+Muuntajamallin huomio mahdollistaa tekstipaikkojen välisen tiedonkulun.
+Rinnakkainen laskenta tekee muuntajien opettamisesta tehokasta grafiikkasuorittimilla.
+Oppimisnopeus kasvaa aluksi ja pienenee opetuksen loppua kohti.
+Gradientin leikkaus estää yksittäistä poikkeavaa erää muuttamasta mallia liikaa.
+Hyvä kuvaaja näyttää sekä opetus- että validointihäviön ajan funktiona.
+Kokeen johtopäätöksen pitää perustua mitattuun tulokseen.
+Suoritusajan ja käsiteltyjen tokenien määrä kirjataan jokaisessa ajossa.
+Esimerkkiaineisto on tarkoitettu vain ohjelman nopeaan testaamiseen.

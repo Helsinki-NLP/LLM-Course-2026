@@ -1,0 +1,2 @@
+# The benchmark, scorer, mock server, and summarizer use only Python 3's
+# standard library. vLLM is a separate server dependency and is not installed here.

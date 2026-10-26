@@ -1,0 +1,827 @@
+% =====================================================================
+%  LDA-T318 — Large Language Models and Generative AI for NLP
+%  Reference list for Aarne's lectures (weeks 1, 2, 4).
+%
+%  NOTE ON USE.  The decks deliberately do NOT run BibTeX/biber: every
+%  quantitative claim carries an inline \source{...} so that the slide is
+%  self-contained when projected and when exported as a PNG.  This file is
+%  the canonical bibliography behind those short source lines, and is what
+%  the course reading list is generated from.  Keys follow
+%  <firstauthor><year><shorttitle>.
+% =====================================================================
+
+% --------------------------------------------------------------- L1: foundations
+@inproceedings{vaswani2017attention,
+  author    = {Vaswani, Ashish and Shazeer, Noam and Parmar, Niki and Uszkoreit, Jakob
+               and Jones, Llion and Gomez, Aidan N. and Kaiser, {\L}ukasz and Polosukhin, Illia},
+  title     = {Attention Is All You Need},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2017},
+  note      = {arXiv:1706.03762},
+}
+
+@inproceedings{bahdanau2015neural,
+  author    = {Bahdanau, Dzmitry and Cho, Kyunghyun and Bengio, Yoshua},
+  title     = {Neural Machine Translation by Jointly Learning to Align and Translate},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2015},
+  note      = {arXiv:1409.0473},
+}
+
+@article{radford2019language,
+  author  = {Radford, Alec and Wu, Jeffrey and Child, Rewon and Luan, David
+             and Amodei, Dario and Sutskever, Ilya},
+  title   = {Language Models are Unsupervised Multitask Learners},
+  journal = {OpenAI technical report},
+  year    = {2019},
+}
+
+@inproceedings{brown2020language,
+  author    = {Brown, Tom B. and others},
+  title     = {Language Models are Few-Shot Learners},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2020},
+  note      = {arXiv:2005.14165},
+}
+
+% --------------------------------------------------------------- L1: tokenization
+@inproceedings{sennrich2016neural,
+  author    = {Sennrich, Rico and Haddow, Barry and Birch, Alexandra},
+  title     = {Neural Machine Translation of Rare Words with Subword Units},
+  booktitle = {Proceedings of ACL},
+  year      = {2016},
+  note      = {arXiv:1508.07909},
+}
+
+@inproceedings{kudo2018sentencepiece,
+  author    = {Kudo, Taku and Richardson, John},
+  title     = {{SentencePiece}: A Simple and Language Independent Subword Tokenizer
+               and Detokenizer for Neural Text Processing},
+  booktitle = {Proceedings of EMNLP: System Demonstrations},
+  year      = {2018},
+}
+
+@inproceedings{rust2021good,
+  author    = {Rust, Phillip and Pfeiffer, Jonas and Vuli{\'c}, Ivan
+               and Ruder, Sebastian and Gurevych, Iryna},
+  title     = {How Good is Your Tokenizer? On the Monolingual Performance
+               of Multilingual Language Models},
+  booktitle = {Proceedings of ACL},
+  year      = {2021},
+}
+
+@inproceedings{petrov2023language,
+  author    = {Petrov, Aleksandar and La Malfa, Emanuele and Torr, Philip H. S.
+               and Bibi, Adel},
+  title     = {Language Model Tokenizers Introduce Unfairness Between Languages},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2023},
+  note      = {arXiv:2305.15425},
+}
+
+@inproceedings{press2017using,
+  author    = {Press, Ofir and Wolf, Lior},
+  title     = {Using the Output Embedding to Improve Language Models},
+  booktitle = {Proceedings of EACL},
+  year      = {2017},
+}
+
+% --------------------------------------------------------------- L1: the 2026 block
+@article{zhang2019root,
+  author  = {Zhang, Biao and Sennrich, Rico},
+  title   = {Root Mean Square Layer Normalization},
+  journal = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year    = {2019},
+  note    = {arXiv:1910.07467},
+}
+
+@article{su2021roformer,
+  author  = {Su, Jianlin and Lu, Yu and Pan, Shengfeng and Murtadha, Ahmed
+             and Wen, Bo and Liu, Yunfeng},
+  title   = {{RoFormer}: Enhanced Transformer with Rotary Position Embedding},
+  journal = {arXiv preprint arXiv:2104.09864},
+  year    = {2021},
+}
+
+@article{shazeer2020glu,
+  author  = {Shazeer, Noam},
+  title   = {{GLU} Variants Improve Transformer},
+  journal = {arXiv preprint arXiv:2002.05202},
+  year    = {2020},
+}
+
+@article{shazeer2019fast,
+  author  = {Shazeer, Noam},
+  title   = {Fast Transformer Decoding: One Write-Head is All You Need},
+  journal = {arXiv preprint arXiv:1911.02150},
+  year    = {2019},
+  note    = {multi-query attention},
+}
+
+@inproceedings{ainslie2023gqa,
+  author    = {Ainslie, Joshua and Lee-Thorp, James and de Jong, Michiel
+               and Zemlyanskiy, Yury and Lebr{\'o}n, Federico and Sanghai, Sumit},
+  title     = {{GQA}: Training Generalized Multi-Query Transformer Models
+               from Multi-Head Checkpoints},
+  booktitle = {Proceedings of EMNLP},
+  year      = {2023},
+  note      = {arXiv:2305.13245},
+}
+
+@article{beltagy2020longformer,
+  author  = {Beltagy, Iz and Peters, Matthew E. and Cohan, Arman},
+  title   = {{Longformer}: The Long-Document Transformer},
+  journal = {arXiv preprint arXiv:2004.05150},
+  year    = {2020},
+  note    = {sliding-window attention},
+}
+
+@article{deepseek2024v2,
+  author  = {{DeepSeek-AI}},
+  title   = {{DeepSeek-V2}: A Strong, Economical, and Efficient
+             Mixture-of-Experts Language Model},
+  journal = {arXiv preprint arXiv:2405.04434},
+  year    = {2024},
+  note    = {introduces multi-head latent attention (MLA)},
+}
+
+@article{deepseek2024v3,
+  author  = {{DeepSeek-AI}},
+  title   = {{DeepSeek-V3} Technical Report},
+  journal = {arXiv preprint arXiv:2412.19437},
+  year    = {2024},
+}
+
+@article{deepseek2025v32,
+  author  = {{DeepSeek-AI}},
+  title   = {{DeepSeek-V3.2}: Sparse Attention for Efficient Long-Context Inference},
+  journal = {Technical report},
+  year    = {2025},
+  note    = {DeepSeek sparse attention (DSA); see also Raschka 2025d},
+}
+
+@article{yang2025qwen3,
+  author  = {{Qwen Team}},
+  title   = {{Qwen3} Technical Report},
+  journal = {arXiv preprint arXiv:2505.09388},
+  year    = {2025},
+}
+
+@article{gemma2025gemma3,
+  author  = {{Gemma Team, Google DeepMind}},
+  title   = {{Gemma 3} Technical Report},
+  journal = {arXiv preprint arXiv:2503.19786},
+  year    = {2025},
+}
+
+@article{kazemnejad2023impact,
+  author  = {Kazemnejad, Amirhossein and Padhi, Inkit and Natesan Ramamurthy, Karthikeyan
+             and Das, Payel and Reddy, Siva},
+  title   = {The Impact of Positional Encoding on Length Generalization in Transformers},
+  journal = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year    = {2023},
+  note    = {the NoPE result},
+}
+
+% --------------------------------------------------------------- L1: mixture of experts
+@inproceedings{shazeer2017outrageously,
+  author    = {Shazeer, Noam and Mirhoseini, Azalia and Maziarz, Krzysztof
+               and Davis, Andy and Le, Quoc and Hinton, Geoffrey and Dean, Jeff},
+  title     = {Outrageously Large Neural Networks: The Sparsely-Gated
+               Mixture-of-Experts Layer},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2017},
+}
+
+@article{fedus2022switch,
+  author  = {Fedus, William and Zoph, Barret and Shazeer, Noam},
+  title   = {Switch Transformers: Scaling to Trillion Parameter Models
+             with Simple and Efficient Sparsity},
+  journal = {Journal of Machine Learning Research},
+  volume  = {23},
+  number  = {120},
+  pages   = {1--39},
+  year    = {2022},
+}
+
+@article{dai2024deepseekmoe,
+  author  = {Dai, Damai and others},
+  title   = {{DeepSeekMoE}: Towards Ultimate Expert Specialization
+             in Mixture-of-Experts Language Models},
+  journal = {arXiv preprint arXiv:2401.06066},
+  year    = {2024},
+  note    = {fine-grained experts and shared experts},
+}
+
+% --------------------------------------------------------------- L2: optimisation
+@inproceedings{loshchilov2019decoupled,
+  author    = {Loshchilov, Ilya and Hutter, Frank},
+  title     = {Decoupled Weight Decay Regularization},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2019},
+  note      = {AdamW; arXiv:1711.05101},
+}
+
+@inproceedings{kingma2015adam,
+  author    = {Kingma, Diederik P. and Ba, Jimmy},
+  title     = {{Adam}: A Method for Stochastic Optimization},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2015},
+}
+
+@article{hu2024minicpm,
+  author  = {Hu, Shengding and others},
+  title   = {{MiniCPM}: Unveiling the Potential of Small Language Models
+             with Scalable Training Strategies},
+  journal = {arXiv preprint arXiv:2404.06395},
+  year    = {2024},
+  note    = {warmup-stable-decay (WSD) learning-rate schedule},
+}
+
+% --------------------------------------------------------------- L2: data
+@inproceedings{penedo2024fineweb,
+  author    = {Penedo, Guilherme and Kydl{\'\i}{\v c}ek, Hynek and Lozhkov, Anton
+               and Mitchell, Margaret and Raffel, Colin and Von Werra, Leandro
+               and Wolf, Thomas},
+  title     = {The {FineWeb} Datasets: Decanting the Web for the Finest Text Data at Scale},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS),
+               Datasets and Benchmarks Track},
+  year      = {2024},
+  note      = {arXiv:2406.17557},
+}
+
+@article{raffel2020exploring,
+  author  = {Raffel, Colin and Shazeer, Noam and Roberts, Adam and Lee, Katherine
+             and Narang, Sharan and Matena, Michael and Zhou, Yanqi and Li, Wei
+             and Liu, Peter J.},
+  title   = {Exploring the Limits of Transfer Learning with a Unified
+             Text-to-Text Transformer},
+  journal = {Journal of Machine Learning Research},
+  volume  = {21},
+  number  = {140},
+  pages   = {1--67},
+  year    = {2020},
+  note    = {C4 and its heuristic filters},
+}
+
+@inproceedings{lee2022deduplicating,
+  author    = {Lee, Katherine and Ippolito, Daphne and Nystrom, Andrew and Zhang, Chiyuan
+               and Eck, Douglas and Callison-Burch, Chris and Carlini, Nicholas},
+  title     = {Deduplicating Training Data Makes Language Models Better},
+  booktitle = {Proceedings of ACL},
+  year      = {2022},
+}
+
+@inproceedings{broder1997resemblance,
+  author    = {Broder, Andrei Z.},
+  title     = {On the Resemblance and Containment of Documents},
+  booktitle = {Compression and Complexity of Sequences},
+  year      = {1997},
+  note      = {MinHash},
+}
+
+@article{soldaini2024dolma,
+  author  = {Soldaini, Luca and others},
+  title   = {{Dolma}: An Open Corpus of Three Trillion Tokens for
+             Language Model Pretraining Research},
+  journal = {arXiv preprint arXiv:2402.00159},
+  year    = {2024},
+}
+
+@article{luukkonen2023fingpt,
+  author  = {Luukkonen, Risto and others},
+  title   = {{FinGPT}: Large Generative Models for a Small Language},
+  journal = {Proceedings of EMNLP},
+  year    = {2023},
+  note    = {arXiv:2311.05640; the Finnish pretraining data story behind Poro},
+}
+
+@article{luukkonen2024poro,
+  author  = {Luukkonen, Risto and others},
+  title   = {{Poro} 34{B} and the Blessing of Multilinguality},
+  journal = {arXiv preprint arXiv:2404.01856},
+  year    = {2024},
+  note    = {Finnish + English + code on LUMI; cross-lingual transfer},
+}
+
+@article{nllb2022no,
+  author  = {{NLLB Team}},
+  title   = {No Language Left Behind: Scaling Human-Centered Machine Translation},
+  journal = {arXiv preprint arXiv:2207.04672},
+  year    = {2022},
+  note    = {FLORES-200, used for the fertility comparison in L1},
+}
+
+% --------------------------------------------------------------- L2: scaling laws
+@article{kaplan2020scaling,
+  author  = {Kaplan, Jared and McCandlish, Sam and Henighan, Tom and Brown, Tom B.
+             and Chess, Benjamin and Child, Rewon and Gray, Scott and Radford, Alec
+             and Wu, Jeffrey and Amodei, Dario},
+  title   = {Scaling Laws for Neural Language Models},
+  journal = {arXiv preprint arXiv:2001.08361},
+  year    = {2020},
+}
+
+@inproceedings{hoffmann2022training,
+  author    = {Hoffmann, Jordan and others},
+  title     = {Training Compute-Optimal Large Language Models},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2022},
+  note      = {Chinchilla; arXiv:2203.15556},
+}
+
+@article{wei2022emergent,
+  author  = {Wei, Jason and others},
+  title   = {Emergent Abilities of Large Language Models},
+  journal = {Transactions on Machine Learning Research},
+  year    = {2022},
+}
+
+@inproceedings{schaeffer2023are,
+  author    = {Schaeffer, Rylan and Miranda, Brando and Koyejo, Sanmi},
+  title     = {Are Emergent Abilities of Large Language Models a Mirage?},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2023},
+}
+
+@article{sardana2024beyond,
+  author  = {Sardana, Nikhil and Portes, Jacob and Doubov, Sasha and Frankle, Jonathan},
+  title   = {Beyond Chinchilla-Optimal: Accounting for Inference in
+             Language Model Scaling Laws},
+  journal = {arXiv preprint arXiv:2401.00448},
+  year    = {2024},
+  note    = {why small models are trained far past compute-optimal},
+}
+
+@article{grattafiori2024llama3,
+  author  = {{Llama Team, AI @ Meta}},
+  title   = {The {Llama} 3 Herd of Models},
+  journal = {arXiv preprint arXiv:2407.21783},
+  year    = {2024},
+}
+
+% --------------------------------------------------------------- L2: systems
+@inproceedings{rajbhandari2020zero,
+  author    = {Rajbhandari, Samyam and Rasley, Jeff and Ruwase, Olatunji and He, Yuxiong},
+  title     = {{ZeRO}: Memory Optimizations Toward Training Trillion Parameter Models},
+  booktitle = {Proceedings of SC20},
+  year      = {2020},
+}
+
+@article{zhao2023pytorch,
+  author  = {Zhao, Yanli and others},
+  title   = {{PyTorch FSDP}: Experiences on Scaling Fully Sharded Data Parallel},
+  journal = {Proceedings of the VLDB Endowment},
+  year    = {2023},
+  note    = {arXiv:2304.11277},
+}
+
+@article{shoeybi2019megatron,
+  author  = {Shoeybi, Mohammad and Patwary, Mostofa and Puri, Raul and LeGresley, Patrick
+             and Casper, Jared and Catanzaro, Bryan},
+  title   = {{Megatron-LM}: Training Multi-Billion Parameter Language Models
+             Using Model Parallelism},
+  journal = {arXiv preprint arXiv:1909.08053},
+  year    = {2019},
+  note    = {tensor parallelism},
+}
+
+@inproceedings{huang2019gpipe,
+  author    = {Huang, Yanping and others},
+  title     = {{GPipe}: Efficient Training of Giant Neural Networks
+               using Pipeline Parallelism},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2019},
+}
+
+@inproceedings{narayanan2021efficient,
+  author    = {Narayanan, Deepak and others},
+  title     = {Efficient Large-Scale Language Model Training on {GPU} Clusters
+               Using {Megatron-LM}},
+  booktitle = {Proceedings of SC21},
+  year      = {2021},
+  note      = {3D parallelism and the MFU metric},
+}
+
+@article{chen2016training,
+  author  = {Chen, Tianqi and Xu, Bing and Zhang, Chiyuan and Guestrin, Carlos},
+  title   = {Training Deep Nets with Sublinear Memory Cost},
+  journal = {arXiv preprint arXiv:1604.06174},
+  year    = {2016},
+  note    = {activation checkpointing},
+}
+
+@inproceedings{micikevicius2018mixed,
+  author    = {Micikevicius, Paulius and others},
+  title     = {Mixed Precision Training},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2018},
+}
+
+@article{peng2023yarn,
+  author  = {Peng, Bowen and Quesnelle, Jeffrey and Fan, Honglu and Shippole, Enrico},
+  title   = {{YaRN}: Efficient Context Window Extension of Large Language Models},
+  journal = {arXiv preprint arXiv:2309.00071},
+  year    = {2023},
+}
+
+% --------------------------------------------------------------- L3: post-training
+@inproceedings{ouyang2022training,
+  author    = {Ouyang, Long and others},
+  title     = {Training Language Models to Follow Instructions with Human Feedback},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2022},
+  note      = {InstructGPT; arXiv:2203.02155},
+}
+
+@article{schulman2017proximal,
+  author  = {Schulman, John and Wolski, Filip and Dhariwal, Prafulla
+             and Radford, Alec and Klimov, Oleg},
+  title   = {Proximal Policy Optimization Algorithms},
+  journal = {arXiv preprint arXiv:1707.06347},
+  year    = {2017},
+}
+
+@article{bradley1952rank,
+  author  = {Bradley, Ralph Allan and Terry, Milton E.},
+  title   = {Rank Analysis of Incomplete Block Designs:
+             I. The Method of Paired Comparisons},
+  journal = {Biometrika},
+  volume  = {39},
+  number  = {3/4},
+  pages   = {324--345},
+  year    = {1952},
+}
+
+@inproceedings{rafailov2023direct,
+  author    = {Rafailov, Rafael and Sharma, Archit and Mitchell, Eric
+               and Ermon, Stefano and Manning, Christopher D. and Finn, Chelsea},
+  title     = {Direct Preference Optimization: Your Language Model
+               is Secretly a Reward Model},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2023},
+  note      = {DPO; arXiv:2305.18290},
+}
+
+@inproceedings{azar2024general,
+  author    = {Azar, Mohammad Gheshlaghi and Rowland, Mark and Piot, Bilal
+               and Guo, Daniel and Calandriello, Daniele and Valko, Michal
+               and Munos, R{\'e}mi},
+  title     = {A General Theoretical Paradigm to Understand Learning
+               from Human Preferences},
+  booktitle = {Proceedings of AISTATS},
+  year      = {2024},
+  note      = {IPO},
+}
+
+@article{ethayarajh2024kto,
+  author  = {Ethayarajh, Kawin and Xu, Winnie and Muennighoff, Niklas
+             and Jurafsky, Dan and Kiela, Douwe},
+  title   = {{KTO}: Model Alignment as Prospect Theoretic Optimization},
+  journal = {arXiv preprint arXiv:2402.01306},
+  year    = {2024},
+}
+
+@inproceedings{hong2024orpo,
+  author    = {Hong, Jiwoo and Lee, Noah and Thorne, James},
+  title     = {{ORPO}: Monolithic Preference Optimization without Reference Model},
+  booktitle = {Proceedings of EMNLP},
+  year      = {2024},
+  note      = {arXiv:2403.07691},
+}
+
+@inproceedings{meng2024simpo,
+  author    = {Meng, Yu and Xia, Mengzhou and Chen, Danqi},
+  title     = {{SimPO}: Simple Preference Optimization with a Reference-Free Reward},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2024},
+}
+
+@article{shao2024deepseekmath,
+  author  = {Shao, Zhihong and others},
+  title   = {{DeepSeekMath}: Pushing the Limits of Mathematical Reasoning
+             in Open Language Models},
+  journal = {arXiv preprint arXiv:2402.03300},
+  year    = {2024},
+  note    = {introduces GRPO},
+}
+
+@article{deepseek2025r1,
+  author  = {{DeepSeek-AI}},
+  title   = {{DeepSeek-R1}: Incentivizing Reasoning Capability in {LLMs}
+             via Reinforcement Learning},
+  journal = {arXiv preprint arXiv:2501.12948},
+  year    = {2025},
+}
+
+@article{yu2025dapo,
+  author  = {Yu, Qiying and others},
+  title   = {{DAPO}: An Open-Source {LLM} Reinforcement Learning System at Scale},
+  journal = {arXiv preprint arXiv:2503.14476},
+  year    = {2025},
+}
+
+@article{liu2025understanding,
+  author  = {Liu, Zichen and Chen, Changyu and Li, Wenjun and Qi, Penghui
+             and Pang, Tianyu and Du, Chao and Lee, Wee Sun and Lin, Min},
+  title   = {Understanding R1-Zero-Like Training: A Critical Perspective},
+  journal = {arXiv preprint arXiv:2503.20783},
+  year    = {2025},
+  note    = {Dr. GRPO},
+}
+
+@inproceedings{lightman2024lets,
+  author    = {Lightman, Hunter and others},
+  title     = {Let's Verify Step by Step},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2024},
+  note      = {process reward models},
+}
+
+@inproceedings{zhou2023lima,
+  author    = {Zhou, Chunting and others},
+  title     = {{LIMA}: Less Is More for Alignment},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2023},
+  note      = {the quality-over-quantity argument for SFT data},
+}
+
+@article{hinton2015distilling,
+  author  = {Hinton, Geoffrey and Vinyals, Oriol and Dean, Jeff},
+  title   = {Distilling the Knowledge in a Neural Network},
+  journal = {arXiv preprint arXiv:1503.02531},
+  year    = {2015},
+}
+
+@article{luo2025empirical,
+  author  = {Luo, Yun and others},
+  title   = {An Empirical Study of Catastrophic Forgetting in Large Language Models
+             During Continual Fine-tuning},
+  journal = {arXiv preprint arXiv:2308.08747},
+  year    = {2025},
+}
+
+% --------------------------------------------------------------- L3: PEFT
+@inproceedings{hu2022lora,
+  author    = {Hu, Edward J. and Shen, Yelong and Wallis, Phillip
+               and Allen-Zhu, Zeyuan and Li, Yuanzhi and Wang, Shean
+               and Wang, Lu and Chen, Weizhu},
+  title     = {{LoRA}: Low-Rank Adaptation of Large Language Models},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2022},
+  note      = {arXiv:2106.09685},
+}
+
+@article{biderman2024lora,
+  author  = {Biderman, Dan and others},
+  title   = {{LoRA} Learns Less and Forgets Less},
+  journal = {Transactions on Machine Learning Research},
+  year    = {2024},
+  note    = {arXiv:2405.09673},
+}
+
+% --------------------------------------------------------------- L4: inference
+@inproceedings{kwon2023efficient,
+  author    = {Kwon, Woosuk and Li, Zhuohan and Zhuang, Siyuan and Sheng, Ying
+               and Zheng, Lianmin and Yu, Cody Hao and Gonzalez, Joseph E.
+               and Zhang, Hao and Stoica, Ion},
+  title     = {Efficient Memory Management for Large Language Model Serving
+               with {PagedAttention}},
+  booktitle = {Proceedings of SOSP},
+  year      = {2023},
+  note      = {vLLM; arXiv:2309.06180},
+}
+
+@inproceedings{yu2022orca,
+  author    = {Yu, Gyeong-In and Jeong, Joo Seong and Kim, Geon-Woo
+               and Kim, Soojeong and Chun, Byung-Gon},
+  title     = {{Orca}: A Distributed Serving System for Transformer-Based
+               Generative Models},
+  booktitle = {Proceedings of OSDI},
+  year      = {2022},
+  note      = {iteration-level (continuous) batching},
+}
+
+@inproceedings{zheng2024sglang,
+  author    = {Zheng, Lianmin and others},
+  title     = {{SGLang}: Efficient Execution of Structured Language Model Programs},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2024},
+  note      = {RadixAttention prefix caching; arXiv:2312.07104},
+}
+
+@inproceedings{agrawal2024taming,
+  author    = {Agrawal, Amey and Kedia, Nitin and Panwar, Ashish and Mohan, Jayashree
+               and Kwatra, Nipun and Gulavani, Bhargav S. and Tumanov, Alexey
+               and Ramjee, Ramachandran},
+  title     = {Taming Throughput-Latency Tradeoff in {LLM} Inference
+               with {Sarathi-Serve}},
+  booktitle = {Proceedings of OSDI},
+  year      = {2024},
+  note      = {chunked prefill and the goodput framing},
+}
+
+@inproceedings{zhong2024distserve,
+  author    = {Zhong, Yinmin and others},
+  title     = {{DistServe}: Disaggregating Prefill and Decoding for Goodput-optimized
+               Large Language Model Serving},
+  booktitle = {Proceedings of OSDI},
+  year      = {2024},
+}
+
+@inproceedings{dao2022flashattention,
+  author    = {Dao, Tri and Fu, Daniel Y. and Ermon, Stefano and Rudra, Atri
+               and R{\'e}, Christopher},
+  title     = {{FlashAttention}: Fast and Memory-Efficient Exact Attention
+               with {IO}-Awareness},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2022},
+}
+
+@inproceedings{leviathan2023fast,
+  author    = {Leviathan, Yaniv and Kalman, Matan and Matias, Yossi},
+  title     = {Fast Inference from Transformers via Speculative Decoding},
+  booktitle = {Proceedings of ICML},
+  year      = {2023},
+}
+
+@article{chen2023accelerating,
+  author  = {Chen, Charlie and Borgeaud, Sebastian and Irving, Geoffrey
+             and Lespiau, Jean-Baptiste and Sifre, Laurent and Jumper, John},
+  title   = {Accelerating Large Language Model Decoding with Speculative Sampling},
+  journal = {arXiv preprint arXiv:2302.01318},
+  year    = {2023},
+}
+
+@inproceedings{cai2024medusa,
+  author    = {Cai, Tianle and Li, Yuhong and Geng, Zhengyang and Peng, Hongwu
+               and Lee, Jason D. and Chen, Deming and Dao, Tri},
+  title     = {{Medusa}: Simple {LLM} Inference Acceleration Framework
+               with Multiple Decoding Heads},
+  booktitle = {Proceedings of ICML},
+  year      = {2024},
+}
+
+@inproceedings{li2024eagle,
+  author    = {Li, Yuhui and Wei, Fangyun and Zhang, Chao and Zhang, Hongyang},
+  title     = {{EAGLE}: Speculative Sampling Requires Rethinking Feature Uncertainty},
+  booktitle = {Proceedings of ICML},
+  year      = {2024},
+}
+
+@inproceedings{lin2024awq,
+  author    = {Lin, Ji and Tang, Jiaming and Tang, Haotian and Yang, Shang
+               and Dang, Xingyu and Han, Song},
+  title     = {{AWQ}: Activation-aware Weight Quantization for {LLM} Compression
+               and Acceleration},
+  booktitle = {Proceedings of MLSys},
+  year      = {2024},
+}
+
+@inproceedings{frantar2023gptq,
+  author    = {Frantar, Elias and Ashkboos, Saleh and Hoefler, Torsten
+               and Alistarh, Dan},
+  title     = {{GPTQ}: Accurate Post-Training Quantization for Generative
+               Pre-trained Transformers},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2023},
+}
+
+@article{micikevicius2022fp8,
+  author  = {Micikevicius, Paulius and others},
+  title   = {{FP8} Formats for Deep Learning},
+  journal = {arXiv preprint arXiv:2209.05433},
+  year    = {2022},
+  note    = {E4M3 and E5M2},
+}
+
+@article{willard2023efficient,
+  author  = {Willard, Brandon T. and Louf, R{\'e}mi},
+  title   = {Efficient Guided Generation for Large Language Models},
+  journal = {arXiv preprint arXiv:2307.09702},
+  year    = {2023},
+  note    = {Outlines; FSM-based constrained decoding},
+}
+
+@article{dong2024xgrammar,
+  author  = {Dong, Yixin and others},
+  title   = {{XGrammar}: Flexible and Efficient Structured Generation Engine
+             for Large Language Models},
+  journal = {arXiv preprint arXiv:2411.15100},
+  year    = {2024},
+}
+
+@inproceedings{holtzman2020curious,
+  author    = {Holtzman, Ari and Buys, Jan and Du, Li and Forbes, Maxwell
+               and Choi, Yejin},
+  title     = {The Curious Case of Neural Text Degeneration},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2020},
+  note      = {nucleus (top-p) sampling},
+}
+
+@article{nguyen2024turning,
+  author  = {Nguyen, Minh and Baker, Andrew and Neo, Clement and Roush, Allen
+             and Kirsch, Andreas and Shwartz-Ziv, Ravid},
+  title   = {Turning Up the Heat: Min-p Sampling for Creative and Coherent
+             {LLM} Outputs},
+  journal = {arXiv preprint arXiv:2407.01082},
+  year    = {2024},
+}
+
+@misc{he2025defeating,
+  author       = {He, Horace and {Thinking Machines Lab}},
+  title        = {Defeating Nondeterminism in {LLM} Inference},
+  year         = {2025},
+  howpublished = {Thinking Machines Lab, Connectionism blog},
+  note         = {batch invariance; the framing used in L4 section 8},
+}
+
+% --------------------------------------------------------------- courses and playbooks
+@misc{cs336,
+  author       = {Lee, Tatsunori and Hashimoto, Percy Liang and {Stanford CS336 staff}},
+  title        = {{CS336}: Language Modeling from Scratch},
+  year         = {2025},
+  howpublished = {Stanford University course materials},
+}
+
+@misc{karpathy2023nanogpt,
+  author       = {Karpathy, Andrej},
+  title        = {{nanoGPT} and {nanochat}},
+  year         = {2023--2025},
+  howpublished = {\url{https://github.com/karpathy}},
+}
+
+@misc{hf2025playbook,
+  author       = {{Hugging Face}},
+  title        = {The Smol Training Playbook: The Secrets to Building
+                  World-Class {LLMs}},
+  year         = {2025},
+  howpublished = {Hugging Face Spaces},
+}
+
+% --------------------------------------------------------------- Raschka, Ahead of AI
+%  These are the dated secondary sources behind most 2026 model facts in the
+%  decks.  Cited on slides as e.g. \cit{Raschka 2026a}.
+@misc{raschka2025state,
+  author       = {Raschka, Sebastian},
+  title        = {The State of {LLMs} in 2025},
+  year         = {2025},
+  howpublished = {Ahead of AI},
+}
+
+@misc{raschka2025deepseek,
+  author       = {Raschka, Sebastian},
+  title        = {From {DeepSeek} {V3} to {V3.2}},
+  month        = dec,
+  year         = {2025},
+  howpublished = {Ahead of AI},
+}
+
+@misc{raschka2025evaluation,
+  author       = {Raschka, Sebastian},
+  title        = {Understanding the 4 Main Approaches to {LLM} Evaluation},
+  year         = {2025},
+  howpublished = {Ahead of AI},
+}
+
+@misc{raschka2026attention,
+  author       = {Raschka, Sebastian},
+  title        = {A Visual Guide to Attention Variants},
+  month        = mar,
+  year         = {2026},
+  howpublished = {Ahead of AI},
+}
+
+@misc{raschka2026spring,
+  author       = {Raschka, Sebastian},
+  title        = {A Dream of Spring for Open-Weight {LLMs}},
+  month        = feb,
+  year         = {2026},
+  howpublished = {Ahead of AI},
+}
+
+@misc{raschka2026arch,
+  author       = {Raschka, Sebastian},
+  title        = {Recent Developments in {LLM} Architectures:
+                  {KV} Sharing, {mHC}, Compressed Attention},
+  month        = may,
+  year         = {2026},
+  howpublished = {Ahead of AI},
+}
+
+@misc{raschka2026effort,
+  author       = {Raschka, Sebastian},
+  title        = {Controlling Reasoning Effort in {LLMs}},
+  month        = jul,
+  year         = {2026},
+  howpublished = {Ahead of AI},
+}
+
+@misc{raschka2026reasoning,
+  author       = {Raschka, Sebastian},
+  title        = {Build Your Own Reasoning Model},
+  month        = oct,
+  year         = {2026},
+  howpublished = {Ahead of AI},
+}
