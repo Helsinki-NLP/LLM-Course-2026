@@ -15,7 +15,7 @@ Course materials for the 2026 University of Helsinki course.
 - **Teachers:** Aarne Talman (weeks 1–3 and 7), Jussi Karlgren (week 4),
   Dmitry Kan (weeks 5–6)
 - **Computing:** CSC Roihu, using course project `project_2021893`
-- **Assessment:** final project, consisting of a report and code repository
+- **Assessment:** final project, consisting of a PDF report and ZIP code archive
 
 **Prerequisites:** Python programming, basic machine learning and familiarity
 with a Unix command line. PyTorch experience is useful but not required.
@@ -86,8 +86,8 @@ After the course, students should be able to:
 - Tuesday: Course recap
 - Thursday: Special topics and project support
 
-There are no intermediate submissions. The final report and code repository
-are due on 31 December 2026.
+There are no intermediate submissions. The PDF report and ZIP code archive are
+due on 31 December 2026.
 
 ## Repository structure
 
@@ -104,9 +104,18 @@ Each completed week contains:
 ## Assessment
 
 The course is graded through the final project. Students develop the project
-throughout the course, write a report section connected to each week's
-material, and submit the final report together with their code repository.
-There are no separately graded weekly submissions.
+throughout the course and write a report section connected to each week's
+material. There are no separately graded weekly submissions.
+
+Submit two files:
+
+1. a PDF report; and
+2. a ZIP archive containing the notebooks, scripts, configurations, small
+   result files and a README explaining how to reproduce the main results.
+
+Do not include model weights, downloaded datasets, caches or virtual
+environments in the ZIP archive. Email both files to
+`aarne.talman@helsinki.fi` by **31 December 2026**.
 
 Reusing one task and model across several weeks often makes the final analysis
 more coherent, but it is not required.

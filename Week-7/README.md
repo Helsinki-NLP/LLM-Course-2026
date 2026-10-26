@@ -17,4 +17,5 @@ There is no new technical lab assignment. Use the week to:
 5. finish with a synthesis explaining how the components interact and what
    you learned from the complete system.
 
-The final report and code repository are due on 31 December 2026.
+Email the final report as a PDF and the code as a ZIP archive to
+`aarne.talman@helsinki.fi` by 31 December 2026.
