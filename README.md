@@ -89,6 +89,41 @@ After the course, students should be able to:
 There are no intermediate submissions. The PDF report and ZIP code archive are
 due on 31 December 2026.
 
+## Roihu access
+
+After joining course project `project_2021893` and accepting the Roihu terms,
+choose either access method:
+
+- **Browser:** open [www.roihu.csc.fi](https://www.roihu.csc.fi) and start
+  JupyterLab. You can use its file browser, optional notebooks and terminal.
+  Multi-factor authentication is required.
+- **SSH:** add an SSH key in MyCSC and sign it to obtain a 24-hour certificate.
+  For the ARM/GPU environment, connect with:
+
+  ```bash
+  ssh USERNAME@roihu-gpu.csc.fi
+  ```
+
+The course repository is:
+
+`https://github.com/Helsinki-NLP/LLM-Course-2026`
+
+Clone it once:
+
+```bash
+git clone https://github.com/Helsinki-NLP/LLM-Course-2026.git
+```
+
+Pull later course updates from inside the cloned directory:
+
+```bash
+git pull
+```
+
+Both access methods use the same files and Slurm queues. Use CPU resources for
+editing and data preparation, interactive GPUs for short experiments, and
+Slurm batch jobs for longer runs.
+
 ## Repository structure
 
 - `Week-1`: language-model foundations, pretraining and Lab 1
