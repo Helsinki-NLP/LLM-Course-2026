@@ -20,8 +20,6 @@ Serve a model and measure a controlled inference workload:
 5. Compare prompt-only JSON generation with schema-constrained generation,
    reporting both invalid-output rate and task score.
 
-Compiled slides are in `PDF/`.
-
 The runnable lab reference is in `Lab-3/`. Start with:
 
 ```bash

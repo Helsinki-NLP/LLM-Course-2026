@@ -98,7 +98,7 @@ are due on 31 December 2026.
 
 Each completed week contains:
 
-- `PDF`: compiled lecture and lab slides
+- `PDF`: lecture and lab slides
 - `Lab-N`: a runnable reference implementation where applicable
 
 ## Assessment

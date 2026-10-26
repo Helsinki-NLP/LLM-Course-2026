@@ -24,8 +24,6 @@ Build a small version of the pretraining pipeline:
    model.
 6. Identify a possible task, model and held-out dataset for the final project.
 
-Compiled slides are in `PDF/`.
-
 The runnable lab reference is in `Lab-1/`. Start with:
 
 ```bash

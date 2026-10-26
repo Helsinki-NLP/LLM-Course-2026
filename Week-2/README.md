@@ -20,8 +20,6 @@ Test whether fine-tuning improves on a strong prompting baseline:
 5. Compare general-knowledge performance before and after fine-tuning as a
    simple forgetting check.
 
-Compiled slides are in `PDF/`.
-
 The runnable lab reference is in `Lab-2/`. Start with:
 
 ```bash
