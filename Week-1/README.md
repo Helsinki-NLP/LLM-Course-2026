@@ -6,7 +6,7 @@
 - Lecture 2: pretraining
 - Lab 1: tokenization, training a tiny GPT, scaling and in-context learning
 
-Compiled slides are in `PDF/`, and their LaTeX sources are in `Slides/`.
+Compiled slides are in `PDF/`.
 
 The runnable lab reference is in `Lab-1/`. Start with:
 

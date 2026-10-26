@@ -11,7 +11,6 @@ Course materials for the 2026 University of Helsinki course.
 
 Each completed week contains:
 
-- `Slides`: LaTeX source and shared slide files
 - `PDF`: compiled lecture and lab slides
 - `Lab-N`: a runnable reference implementation where applicable
 
@@ -42,19 +41,6 @@ for the final report. See the README inside each lab directory for setup and
 Roihu instructions.
 
 The CSC course project is `project_2021893`.
-
-## Building the slides
-
-The slide source for each week is self-contained within its `Slides`
-directory. Use XeLaTeX, for example:
-
-```bash
-cd Week-1/Slides
-xelatex Lecture-1-language-models.tex
-```
-
-The compiled versions are also available in the corresponding `PDF`
-directory.
 
 ## Contact
 

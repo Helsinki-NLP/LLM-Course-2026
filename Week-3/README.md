@@ -5,7 +5,7 @@
 - Lecture 4: language-model inference and serving
 - Lab 3: serve a model and measure speed, quality and output validity
 
-Compiled slides are in `PDF/`, and their LaTeX sources are in `Slides/`.
+Compiled slides are in `PDF/`.
 
 The runnable lab reference is in `Lab-3/`. Start with:
 
