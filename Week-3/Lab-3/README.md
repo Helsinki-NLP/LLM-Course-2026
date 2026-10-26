@@ -17,6 +17,36 @@ The workflow answers four questions:
 The Lab 2 adapter is optional. You can serve the instruct model directly or
 point both server configurations at the same adapter.
 
+## Use the held-out data from your selected task
+
+The bundled NLI file only makes the example runnable. For the real lab, replace
+it with the held-out test data and scorer for your selected project task.
+Lab 3 does not retrain the model, so it normally needs the test split rather
+than the Week 2 training and development files.
+
+Keep the quality comparison controlled:
+
+1. use exactly the same test examples for bf16 and FP8;
+2. reuse the task instruction, output contract, extraction function and metric
+   from the locked Week 2 evaluation;
+3. do not change prompts or parsing after seeing which precision scores better;
+4. record IDs in every output row so predictions can be compared item by item;
+   and
+5. inspect disagreements between bf16 and FP8, not only the aggregate scores.
+
+Adapt `data/heldout-nli.jsonl`, `task_prompt()` and the scoring logic in
+`score_task.py`. If your task does not naturally return JSON, define a small
+JSON schema that represents its answer for the constrained-output comparison.
+
+The speed benchmark uses a separate prompt file. Replace
+`configs/benchmark-prompts.txt` with varied, task-representative prompts whose
+lengths resemble the intended workload. Do not use one repeated prompt, since
+that can turn the experiment into a prefix-cache benchmark.
+
+You may change the task or model between weeks when there is a good reason.
+If you do, state the reason and treat Lab 3 as a new controlled comparison
+rather than claiming direct continuity with the Week 2 results.
+
 ## Start with the local smoke test
 
 The smoke test uses the bundled deterministic OpenAI-compatible server. It

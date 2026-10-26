@@ -16,6 +16,37 @@ Replace its JSONL files with your task data once the pipeline works. Keeping the
 same task or model in later course work can make comparisons easier, but it is
 optional.
 
+## Use data from your selected task
+
+The bundled NLI files are only a runnable example. For the real lab, replace
+them with data from the task you selected for your project, or another suitable
+labelled task if you decide to change direction.
+
+Prepare three separate files:
+
+- **train:** examples used for few-shot demonstrations and LoRA training;
+- **dev:** examples used to compare prompts and choose training settings; and
+- **test:** held-out examples used only after the prompt and training protocol
+  have been fixed.
+
+Give every example a stable ID and verify that the three splits do not overlap.
+Keep the test labels out of prompt development and hyperparameter choices. If
+the original dataset has no official development split, make one from the
+training data with a fixed seed and record how it was created.
+
+You must adapt four task-specific parts of the example:
+
+1. the JSONL fields and labels;
+2. the task instruction and few-shot format in `lab2lib/prompting.py`;
+3. the function that extracts a prediction from the model output; and
+4. the metric used to compare the prediction with the reference answer.
+
+Use the same output contract, extraction function and metric for every
+prompting and fine-tuning condition. Run several examples by hand before the
+full experiment: print the rendered prompt, raw model output, extracted
+prediction and reference answer. This catches data and parser errors that an
+aggregate score can hide.
+
 ## The two execution paths
 
 `configs/smoke.json` uses a deterministic heuristic backend, bundled data, and
