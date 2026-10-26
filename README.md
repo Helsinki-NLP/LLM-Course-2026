@@ -108,6 +108,7 @@ The course repository is:
 
 `https://github.com/Helsinki-NLP/LLM-Course-2026`
 
+Roihu does not copy or update the course files automatically.
 Clone it once:
 
 ```bash
