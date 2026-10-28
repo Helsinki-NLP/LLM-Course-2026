@@ -172,6 +172,14 @@ Useful checks:
 3. Validation loss should not start rising while training loss continues down.
 4. Compare losses only for runs using the same tokenizer and validation data.
 
+Plot the training and validation curves:
+
+```bash
+python3 plot_losses.py runs/medium --output results/medium-loss.png
+```
+
+The command also prints the final training and validation losses.
+
 ## 5. Part C: scaling experiment (optional extension)
 
 The three supplied configurations use the same 32k tokenizer, sequence length,
