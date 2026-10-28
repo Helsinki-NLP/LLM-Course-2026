@@ -46,7 +46,7 @@ After the course, students should be able to:
   and multilingual variation
 - **Retrieval-augmented generation:** retrieval, reranking, context assembly
   and RAG evaluation
-- **Agents:** tool use, agent loops, context management and failure modes
+- **Agents:** tool use, agent loops, context management, memory and failure modes
 
 ## Schedule
 
