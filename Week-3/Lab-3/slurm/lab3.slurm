@@ -2,7 +2,7 @@
 #SBATCH --job-name=lab3-serve-measure
 #SBATCH --partition=gputest
 #SBATCH --time=00:15:00
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:gh200:1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=64G
 #SBATCH --output=logs/lab3-%j.out
