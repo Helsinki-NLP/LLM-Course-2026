@@ -65,7 +65,7 @@ def download_flores(output_dir: Path, languages: list[str], revision: str) -> No
             split="devtest",
             revision=revision,
         )
-        sentences = [row["sentence"].strip() for row in dataset if row["sentence"].strip()]
+        sentences = [row["text"].strip() for row in dataset if row["text"].strip()]
         output = output_dir / f"flores-{language}.txt"
         write_lines(output, sentences)
         print(f"Wrote {len(sentences):,} {language} sentences to {output}")

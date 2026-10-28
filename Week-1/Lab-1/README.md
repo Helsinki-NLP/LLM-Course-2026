@@ -70,6 +70,12 @@ On Roihu, use the course PyTorch module and install
 second CUDA build with pip can replace the module's compatible build. Do not
 create a new environment inside a batch job.
 
+```bash
+module purge
+module load python-pytorch/2.13
+python3 -m pip install --user -r requirements-roihu.txt
+```
+
 Before downloading FLORES+, log in to Hugging Face and accept the dataset terms:
 
 ```bash

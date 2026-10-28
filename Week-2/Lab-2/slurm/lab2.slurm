@@ -13,7 +13,7 @@ set -euo pipefail
 cd "${SLURM_SUBMIT_DIR}"
 
 module purge
-module load pytorch
+module load python-pytorch/2.13
 
 CONFIG="${1:-configs/roihu.json}"
 srun python run_experiment.py --config "${CONFIG}" --fresh

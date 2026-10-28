@@ -85,7 +85,7 @@ On Roihu, load the course PyTorch module and install the dependency list that
 does not contain PyTorch:
 
 ```bash
-module load pytorch
+module load python-pytorch/2.13
 python -m pip install --user -r requirements-roihu.txt
 ```
 
