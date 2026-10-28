@@ -60,9 +60,9 @@ you complete those extensions.
 On a normal Linux machine:
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 ```
 
 On Roihu, use the course PyTorch module and install
@@ -76,10 +76,12 @@ module load python-pytorch/2.13
 python3 -m pip install --user -r requirements-roihu.txt
 ```
 
-Before downloading FLORES+, log in to Hugging Face and accept the dataset terms:
+FLORES+ is gated. Before downloading it, request access on the
+[dataset page](https://huggingface.co/datasets/openlanguagedata/flores_plus).
+After access is granted, authenticate on Roihu:
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 ## 2. Run the local smoke test first
@@ -94,67 +96,72 @@ It produces a tokenizer, token files, a very small model, JSONL training logs
 and two plots/tables under `results/`. The sample is only for debugging; do not
 use its numbers in the report.
 
+This test is intentionally small enough to run on a login node. Run the full
+data preparation and training on compute nodes.
+
 ## 3. Part A: tokenizer and fertility
 
-Download a manageable Finnish Wikipedia slice and FLORES+ in three languages:
+Download a manageable Finnish Wikipedia slice and the English and Finnish
+FLORES+ evaluation sets:
 
 ```bash
-python download_data.py --max-articles 50000 --flores \
-  --languages eng_Latn fin_Latn deu_Latn
+python3 download_data.py --max-articles 50000 --flores \
+  --languages eng_Latn fin_Latn
 ```
 
-Train byte-level BPE tokenizers:
+Use a compute-node shell for the remaining preprocessing. Train the two
+byte-level BPE tokenizers used in the core lab:
 
 ```bash
-python train_tokenizer.py data/wikipedia-train.txt \
-  --vocab-sizes 8000 16000 32000
+python3 train_tokenizer.py data/wikipedia-train.txt \
+  --vocab-sizes 8000 32000
 ```
 
 Compare tokens per word. These are decoder-only GPT-style model tokenizers, not
 embedding models:
 
 ```bash
-python measure_fertility.py \
+python3 measure_fertility.py \
   --language English=data/flores-eng_Latn.txt \
   --language Finnish=data/flores-fin_Latn.txt \
-  --language German=data/flores-deu_Latn.txt \
   --tokenizer BPE-8k=tokenizers/bpe-8000/tokenizer.json \
-  --tokenizer BPE-16k=tokenizers/bpe-16000/tokenizer.json \
   --tokenizer BPE-32k=tokenizers/bpe-32000/tokenizer.json \
-  --hf-model Qwen/Qwen3.5-4B-Base \
-  --hf-model google/gemma-4-E4B \
   --output results/fertility.csv
 ```
 
-Gemma is gated: accept its licence on Hugging Face before running the command.
-Fertility here means tokens divided by whitespace-delimited words. State that
-definition in the report; word segmentation is not equally natural for every
-language.
+Inspect the table with `column -s, -t results/fertility.csv`. Fertility here
+means tokens divided by whitespace-delimited words. State that definition in
+the report; word segmentation is not equally natural for every language.
+
+The third language, 16k tokenizer and comparisons with published model
+tokenizers are optional extensions.
 
 ## 4. Part B: train one tiny GPT
 
 Encode the corpus once:
 
 ```bash
-python prepare_tokens.py \
+python3 prepare_tokens.py \
   --tokenizer tokenizers/bpe-32000/tokenizer.json \
   --train data/wikipedia-train.txt \
   --valid data/wikipedia-valid.txt \
   --output-dir data/tokens-32k
 ```
 
-Debug a short run before requesting a longer allocation:
+Return to the GPU login node and submit a short GPU test. The Slurm script
+requests one GH200 with `--gres=gpu:gh200:1`:
 
 ```bash
 mkdir -p logs
 sbatch slurm/train.slurm configs/smoke.yaml
 ```
 
-For the real run, change the Slurm partition to `gpumedium`, request enough
-time, and use one of the real configurations:
+Monitor it with `squeue --me` and check the log under `logs/`. After the log
+ends with `Saved run to runs/smoke`, submit the core training run:
 
 ```bash
-sbatch slurm/train.slurm configs/medium.yaml
+sbatch --partition=gpumedium --time=01:00:00 \
+  slurm/train.slurm configs/medium.yaml
 ```
 
 Each run writes:
@@ -186,15 +193,18 @@ The three supplied configurations use the same 32k tokenizer, sequence length,
 token budget and seed. Their approximate sizes are 11M, 18M and 27M parameters.
 
 ```bash
-sbatch slurm/train.slurm configs/small.yaml
-sbatch slurm/train.slurm configs/medium.yaml
-sbatch slurm/train.slurm configs/large.yaml
+sbatch --partition=gpumedium --time=01:00:00 \
+  slurm/train.slurm configs/small.yaml
+sbatch --partition=gpumedium --time=01:00:00 \
+  slurm/train.slurm configs/medium.yaml
+sbatch --partition=gpumedium --time=01:00:00 \
+  slurm/train.slurm configs/large.yaml
 ```
 
 After all three finish:
 
 ```bash
-python plot_scaling.py runs/small runs/medium runs/large \
+python3 plot_scaling.py runs/small runs/medium runs/large \
   --output results/scaling.png
 ```
 
@@ -210,7 +220,7 @@ three configurations on Roihu before promising a fixed duration.
 Run the same few-shot sentiment prompt on your model and a larger base model:
 
 ```bash
-python compare_generation.py \
+python3 compare_generation.py \
   --run runs/medium \
   --tokenizer tokenizers/bpe-32000/tokenizer.json \
   --hf-model Qwen/Qwen2.5-0.5B \
@@ -230,6 +240,15 @@ architecture, tokenizer and training data also differ.
 Copy `project-plan.yaml` and fill it in for yourself. It is a planning aid, not
 a separate submission. Keep the held-out test set untouched until the final
 evaluation.
+
+## Completion checklist
+
+For the core lab, check that you have:
+
+- `results/fertility.csv`;
+- `runs/medium/metrics.jsonl` and `runs/medium/summary.json`;
+- `results/medium-loss.png`; and
+- the scripts and configuration needed to reproduce these results.
 
 ## Material for the final report
 
