@@ -20,6 +20,41 @@ pretraining section of the final report.
 - **Part E — project planning:** define the task, model and held-out data that
   you may use in later labs. Reusing them is recommended, not required.
 
+## Core requirements
+
+The minimum work for Lab 1 is:
+
+1. Run `run_smoke_test.sh` to check that the pipeline works.
+2. Compare tokenization for Finnish and English using at least two vocabulary
+   sizes.
+3. Train one of the provided tiny GPT configurations.
+4. Plot its training and validation loss.
+5. Record the parameter count, tokens processed, wall-clock time and estimated
+   compute.
+6. Briefly explain whether the model learned, what evidence supports your
+   conclusion and what the experiment cannot show.
+
+Keep the configuration, code, metrics and plots for the final submission. There
+is no required loss threshold: reproducible evidence and a reasonable
+interpretation matter more than obtaining a particular number.
+
+## Optional extensions
+
+For a more complete experiment, you can:
+
+- compare three languages and all three vocabulary sizes;
+- train the three supplied model sizes with the same tokenizer, token budget
+  and seed;
+- plot validation loss against estimated compute;
+- compare the tiny model with a larger pretrained base model; and
+- complete the project-planning file for a task you may use in later labs.
+
+A strong Week 1 report section is usually one or two pages. It contains a
+clearly labelled tokenization table and loss figure, states the main
+experimental settings, interprets the results and discusses unexpected
+outcomes or limitations. Include the scaling plot and generation comparison if
+you complete those extensions.
+
 ## 1. Set up the environment
 
 On a normal Linux machine:
@@ -131,7 +166,7 @@ Useful checks:
 3. Validation loss should not start rising while training loss continues down.
 4. Compare losses only for runs using the same tokenizer and validation data.
 
-## 5. Part C: scaling experiment
+## 5. Part C: scaling experiment (optional extension)
 
 The three supplied configurations use the same 32k tokenizer, sequence length,
 token budget and seed. Their approximate sizes are 11M, 18M and 27M parameters.
@@ -156,7 +191,7 @@ to fit a new scaling law.
 The stated run times are planning estimates. Measure the packed loader and all
 three configurations on Roihu before promising a fixed duration.
 
-## 6. Part D: what scale buys
+## 6. Part D: what scale buys (optional extension)
 
 Run the same few-shot sentiment prompt on your model and a larger base model:
 
@@ -176,7 +211,7 @@ instruct model.
 This is qualitative rather than a controlled experiment in scale: the
 architecture, tokenizer and training data also differ.
 
-## 7. Part E: plan the final project
+## 7. Part E: plan the final project (recommended, not required)
 
 Copy `project-plan.yaml` and fill it in for yourself. It is a planning aid, not
 a separate submission. Keep the held-out test set untouched until the final
@@ -184,14 +219,16 @@ evaluation.
 
 ## Material for the final report
 
-Include:
+For the core lab, include:
 
-1. the fertility table and your interpretation;
+1. the Finnish–English fertility comparison and your interpretation;
 2. training and validation loss curves;
-3. the scaling plot, with model sizes, token budgets and seeds;
-4. a short comparison of your estimated compute with one published run;
-5. the few-shot outputs and what they show;
-6. links to the exact scripts, configurations and result files.
+3. the parameter count, token count, runtime and estimated compute;
+4. a short explanation of what the results show and what they do not show; and
+5. links to the exact scripts, configuration and result files.
+
+If you complete the extensions, also include the scaling plot with model sizes,
+token budgets and seeds, and the few-shot outputs with a short comparison.
 
 Report unexpected results and what you checked. Reproducible evidence matters
 more than obtaining a particular ordering of the three models.

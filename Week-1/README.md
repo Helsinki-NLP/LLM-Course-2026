@@ -12,17 +12,18 @@ training, mid-training and the emergence of in-context learning.
 
 ## Lab 1 assignment
 
-Build a small version of the pretraining pipeline:
+The core assignment is to build and inspect a small version of the pretraining
+pipeline:
 
-1. Train byte-level BPE tokenizers at several vocabulary sizes.
-2. Compare tokenization efficiency for English, Finnish and a third language.
-3. Train a small decoder-only language model and plot training and validation
+1. Compare tokenization efficiency for English and Finnish with at least two
+   vocabulary sizes.
+2. Train one small decoder-only language model and plot training and validation
    loss.
-4. Repeat the run at three model sizes with a fixed token budget, and compare
-   validation loss with estimated compute.
-5. Run the same few-shot prompt on the small model and a pretrained base
-   model.
-6. Identify a possible task, model and held-out dataset for the final project.
+3. Record the experimental settings and explain what the results show.
+
+Optional extensions include a third language, three-model scaling experiment,
+comparison with a pretrained base model and planning a possible final-project
+task.
 
 The runnable lab reference is in `Lab-1/`. Start with:
 
