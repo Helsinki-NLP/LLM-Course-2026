@@ -2,7 +2,7 @@
 
 The script streams Finnish Wikipedia so that students can choose the corpus
 size without first downloading the full dump. FLORES+ is gated on Hugging
-Face; run ``huggingface-cli login`` and accept its terms before using
+Face; request access and run ``hf auth login`` before using
 ``--flores``.
 """
 

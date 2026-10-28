@@ -10,10 +10,10 @@
 #SBATCH --output=logs/%x-%j.out
 
 set -euo pipefail
-cd "${SLURM_SUBMIT_DIR}"
+cd "${SLURM_SUBMIT_DIR:?Submit this script with sbatch}"
 
 module purge
 module load python-pytorch/2.13
 
 CONFIG="${1:-configs/roihu.json}"
-srun python run_experiment.py --config "${CONFIG}" --fresh
+srun python3 run_experiment.py --config "${CONFIG}" --fresh

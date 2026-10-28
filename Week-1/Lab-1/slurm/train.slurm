@@ -9,10 +9,10 @@
 #SBATCH --output=logs/%x-%j.out
 
 set -euo pipefail
-cd "${SLURM_SUBMIT_DIR}"
+cd "${SLURM_SUBMIT_DIR:?Submit this script with sbatch}"
 
 module purge
 module load python-pytorch/2.13
 
 CONFIG="${1:-configs/smoke.yaml}"
-srun python train_tiny_gpt.py --config "${CONFIG}" --compile
+srun python3 train_tiny_gpt.py --config "${CONFIG}" --compile

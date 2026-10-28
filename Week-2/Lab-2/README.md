@@ -16,6 +16,9 @@ Replace its JSONL files with your task data once the pipeline works. Keeping the
 same task or model in later course work can make comparisons easier, but it is
 optional.
 
+Lab 2 is not an intermediate submission. Keep the code, results and analysis
+for the post-training section of the final report.
+
 ## Use data from your selected task
 
 The bundled NLI files are only a runnable example. For the real lab, replace
@@ -69,24 +72,26 @@ bash run_smoke_test.sh
 The command runs all four baselines, mock SFT, the before/after knowledge
 check, loss plotting, and artifact validation. It writes to `results/smoke/`.
 Running it again with the same files and seed gives the same predictions and
-scores.
+scores. This test is safe to run on a login node because it does not use a GPU
+or download a model.
 
 ## Set up the real environment
 
 For a machine where pip should install PyTorch:
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 ```
 
 On Roihu, load the course PyTorch module and install the dependency list that
 does not contain PyTorch:
 
 ```bash
+module purge
 module load python-pytorch/2.13
-python -m pip install --user -r requirements-roihu.txt
+python3 -m pip install --user -r requirements-roihu.txt
 ```
 
 ## Inspect and adapt the data
@@ -140,19 +145,29 @@ silently training on prompt tokens changes the experiment.
 
 ## Run on Roihu
 
-Create the log directory, put your project number in the Slurm file, and first
-use the short `gputest` queue:
+Submit GPU jobs from the Roihu login node; Slurm starts the work on a compute
+node. Do not run model evaluation or training directly on the login node.
+The supplied script already requests one GH200 with
+`--gres=gpu:gh200:1`. Create the log directory and first use its short
+`gputest` configuration:
 
 ```bash
 mkdir -p logs
 sbatch slurm/lab2.slurm configs/roihu.json
 ```
 
-After that short run is healthy, choose a suitable longer partition and wall
-time in `slurm/lab2.slurm`. The one-command runner executes:
+After that short run is healthy, submit the real experiment with a longer
+allocation. Command-line options override the short defaults in the script:
 
 ```bash
-python run_experiment.py --config configs/roihu.json --fresh
+sbatch --partition=gpumedium --time=02:00:00 \
+  slurm/lab2.slurm configs/roihu.json
+```
+
+The one-command runner executes:
+
+```bash
+python3 run_experiment.py --config configs/roihu.json --fresh
 ```
 
 Model loading is repeated between phases to keep each evaluator independent.
@@ -163,12 +178,12 @@ files.
 Each phase is also available on its own, which is helpful while debugging:
 
 ```bash
-python evaluate.py --config configs/roihu.json --target baselines
-python evaluate.py --config configs/roihu.json --target forgetting-before
-python sft_lora.py --config configs/roihu.json
-python evaluate.py --config configs/roihu.json --target sft
-python evaluate.py --config configs/roihu.json --target forgetting-after
-python plot_losses.py --config configs/roihu.json
+python3 evaluate.py --config configs/roihu.json --target baselines
+python3 evaluate.py --config configs/roihu.json --target forgetting-before
+python3 sft_lora.py --config configs/roihu.json
+python3 evaluate.py --config configs/roihu.json --target sft
+python3 evaluate.py --config configs/roihu.json --target forgetting-after
+python3 plot_losses.py --config configs/roihu.json
 ```
 
 Run the phases in that order. The individual commands update one shared
@@ -191,6 +206,16 @@ Read a sample of raw generations before trusting a score. A score of exactly
 zero or one often indicates an extraction or prompt-format problem. Base
 models receive plain completion prompts; only instruct models use their own
 chat template.
+
+## Completion checklist
+
+For the final report, keep:
+
+- the adapted train, development and held-out test splits;
+- the exact configuration and task-specific prompting and scoring code;
+- `results.json`, prediction files and the loss plot;
+- a comparison of the prompting and LoRA results; and
+- a short discussion of general-knowledge change and experimental limitations.
 
 ## What the comparison does and does not establish
 

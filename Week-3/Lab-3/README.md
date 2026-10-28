@@ -17,6 +17,9 @@ The workflow answers four questions:
 The Lab 2 adapter is optional. You can serve the instruct model directly or
 point both server configurations at the same adapter.
 
+Lab 3 is not an intermediate submission. Keep the code, measurements and
+analysis for the inference section of the final report.
+
 ## Use the held-out data from your selected task
 
 The bundled NLI file only makes the example runnable. For the real lab, replace
@@ -60,7 +63,8 @@ bash run_smoke_test.sh
 ```
 
 Its results go to `results/smoke/`. They prove that the plumbing works; they
-are not measurements of vLLM or a language model.
+are not measurements of vLLM or a language model. This test is safe to run on
+a login node because it does not use a GPU or download a model.
 
 ## Files to configure
 
@@ -98,7 +102,7 @@ requirements files are intentionally empty apart from comments:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 ```
 
 On Roihu, vLLM comes from the `python-vllm` module. Do not install another
@@ -106,14 +110,22 @@ vLLM, CUDA build of PyTorch, or `torch` into the module environment.
 
 ## Run on Roihu
 
-Use these commands inside a `gpuinteractive` allocation, never on a login
-node. Set the course project so model weights are cached under scratch:
+Request an interactive GH200 from the login node when you want to inspect the
+server manually:
+
+```bash
+srun --account=project_2021893 --partition=gpuinteractive \
+  --gres=gpu:gh200:1 --time=00:15:00 --pty bash
+```
+
+The shell opened by this command is on a compute node. Set the course project
+there so model weights are cached under scratch:
 
 ```bash
 export PROJECT=project_2021893
 ```
 
-The shortest complete run is:
+If the allocation is long enough, the complete workflow is:
 
 ```bash
 bash scripts/run_roihu_experiment.sh results/roihu
@@ -129,9 +141,9 @@ It performs these steps:
    held-out scoring;
 6. stop the server and write `speed-quality.csv`.
 
-The run can take longer than an interactive test allocation because it
-generates a fixed 128 output tokens for every benchmark request. For a quick
-server check, start it and inspect the model list:
+The complete run can take longer than the interactive test allocation because
+it generates a fixed 128 output tokens for every benchmark request. Use the
+interactive shell for a quick server check:
 
 ```bash
 bash scripts/restart.sh bf16
@@ -259,19 +271,37 @@ can benchmark schema decoding separately if its latency matters to the task.
 
 ## Slurm
 
-`slurm/lab3.slurm` is a template for an unattended run. Create its log
-directory before submitting, set the correct project account, and test the
-workflow on `gputest`:
+Submit unattended jobs from the login node; Slurm starts them on a compute
+node. The script already requests one GH200 with `--gres=gpu:gh200:1`.
+Create its log directory and test the workflow using its short `gputest`
+defaults:
 
 ```bash
 mkdir -p logs
 sbatch slurm/lab3.slurm
 ```
 
-The complete bf16 and FP8 sweep will usually need `gpumedium` and a longer time
-request. A server started by Slurm ends with the allocation. Check held jobs
-with `squeue --me`, cancel unneeded jobs with `scancel JOB_ID`, and release
+For the complete bf16 and FP8 sweep, override those defaults:
+
+```bash
+sbatch --partition=gpumedium --time=02:00:00 slurm/lab3.slurm
+```
+
+A server started by Slurm ends with the allocation. Check held jobs with
+`squeue --me`, cancel unneeded jobs with `scancel JOB_ID`, and release
 interactive GPU sessions when finished.
+
+## Completion checklist
+
+For the final report, keep:
+
+- the exact bf16 and FP8 server configurations;
+- raw request and task-observation files;
+- benchmark and task summaries for both precisions;
+- the structured-output comparison;
+- `speed-quality.csv`; and
+- a recommendation that discusses speed, quality, output validity and the
+  limits of the measurements.
 
 ## Caveats worth reporting
 

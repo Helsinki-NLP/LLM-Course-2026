@@ -12,6 +12,6 @@
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:?Submit this script with sbatch}"
 
-# Use gputest to validate the workflow. For the full 2× benchmark, change to
-# gpumedium and request enough time.
+# These short defaults validate the workflow. Override the partition and time
+# on the sbatch command line for the complete benchmark.
 bash scripts/run_roihu_experiment.sh "results/roihu-${SLURM_JOB_ID}"
