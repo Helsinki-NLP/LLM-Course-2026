@@ -217,6 +217,31 @@ For the final report, keep:
 - a comparison of the prompting and LoRA results; and
 - a short discussion of general-knowledge change and experimental limitations.
 
+## Optional extensions
+
+Attempt these only after the main table, loss plot and forgetting check are
+complete. This directory does not include reference code for them. Report
+either extension as extra rows in the same table, scored with the same
+held-out set, parser, decoding settings and forgetting check.
+
+**A — DPO.** Train with TRL's `DPOTrainer`, starting from your SFT adapter
+rather than from the base model. Each example needs `prompt`, `chosen` and
+`rejected` fields. Pairs can come from a public preference set or from your own
+scorer: sample several completions per training prompt and label correct
+completions as chosen and incorrect ones as rejected. Reasonable starting
+values are `beta=0.1`, one epoch and a learning rate of `5e-6`. Watch for the
+known failure mode in which the likelihoods of the chosen and rejected answers
+both fall while the gap between them grows.
+
+**B — GRPO.** Use TRL's `GRPOTrainer` with a programmatic reward: exact match
+on the final answer plus a small bonus for the required output format. This is
+most natural for tasks with a checkable answer, such as GSM8K. Start from your
+SFT adapter with a group size of 8 and about 100 steps. Each step generates
+many completions before it updates the model, so run GRPO only as a batch job:
+debug on `gputest` with a few steps, then submit to `gpumedium`. One hundred
+steps will not produce a reasoning model; report the reward curve and what you
+learned about the method.
+
 ## What the comparison does and does not establish
 
 The shared test set, decoding settings, and parser make the five task scores
