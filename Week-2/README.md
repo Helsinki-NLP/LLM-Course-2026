@@ -28,8 +28,13 @@ bash run_smoke_test.sh
 ```
 
 Choose prompting settings on development data, lock the protocol, and then
-report results on the held-out test set. Reusing the Week 1 task or model is
-optional.
+report results on the held-out test set. Reusing the Week 1 task is optional.
+
+Lab 2 starts from a matching pretrained base and instruct pair downloaded from
+Hugging Face (`Qwen/Qwen3.5-0.8B-Base` and `Qwen/Qwen3.5-0.8B` by default), not
+from the Week 1 model. The tiny GPT from Lab 1 is a custom PyTorch checkpoint
+without an instruct version or chat template, so it cannot be used in this
+pipeline.
 
 Keep the result table, raw generations, loss curve, model and data revisions,
 configuration and a short analysis of whether fine-tuning was worth the
