@@ -119,7 +119,8 @@ srun --account=project_2021893 --partition=gpuinteractive \
 ```
 
 The shell opened by this command is on a compute node. Set the course project
-there so model weights are cached under scratch:
+there so model weights are cached in your own folder under scratch
+(`/scratch/project_2021893/$USER/hf`):
 
 ```bash
 export PROJECT=project_2021893

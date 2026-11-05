@@ -25,6 +25,8 @@ if [[ -z "${HF_HOME:-}" && -z "${PROJECT:-}" ]]; then
   echo "Set PROJECT to the Roihu project name, or set HF_HOME explicitly." >&2
   exit 2
 fi
-export HF_HOME="${HF_HOME:-/scratch/${PROJECT}/hf}"
+# One folder per user, so students do not need write access to each other's files.
+export HF_HOME="${HF_HOME:-/scratch/${PROJECT}/${USER}/hf}"
+mkdir -p "$HF_HOME"
 
 exec python3 "$ROOT/scripts/serve_vllm.py" --config "$CONFIG"
