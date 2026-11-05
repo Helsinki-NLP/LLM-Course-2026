@@ -162,8 +162,8 @@ Find a good instruction before the full run. Start an interactive GPU session
 (15 minutes), then try your prompt on 50 dev examples:
 
 ```bash
-srun --account=project_2021893 --partition=gputest --gres=gpu:gh200:1 \
-    --cpus-per-task=16 --mem=64G --time=00:15:00 --pty bash
+srun --account=project_2021893 --partition=gpuinteractive \
+    --gres=gpu:gh200:1 --time=00:15:00 --pty bash
 module load python-pytorch/2.13
 python3 try_prompt.py --config configs/my-task.json          # instruct, 5 examples
 python3 try_prompt.py --config configs/my-task.json --all    # all four prompts
