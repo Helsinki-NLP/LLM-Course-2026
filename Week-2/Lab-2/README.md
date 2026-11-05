@@ -16,14 +16,14 @@ dataset: an existing labelled dataset is enough (step 5).
 
 ## What you need to do
 
-**Minimum (enough for the report):** steps 1–10 once, with your own task and
+**Minimum (enough for the report):** steps 1–11 once, with your own task and
 the default settings. That gives you the results table, the loss plot and a
 short discussion.
 
 **If you want to go further** (pick any, after the minimum):
 
 - tune the learning rate, epochs or LoRA rank, one at a time ([REFERENCE.md](REFERENCE.md#tuning));
-- improve the prompt: a clearer instruction, or more few-shot examples (`prompting.few_shot_count` in the config);
+- improve the prompt further with `try_prompt.py`: other instructions, or more few-shot examples (`prompting.few_shot_count` in the config);
 - analyse the errors: which labels are confused, and what the wrong examples have in common;
 - try a larger base and instruct pair from the same model family;
 - compare languages, for example the same task in English and Finnish;
@@ -152,16 +152,38 @@ python3 show_examples.py --config configs/my-task.json --run instruct-5-shot --n
 
 ✓ `check_data.py` ends with `No errors found.` and the prompt looks right.
 
-## 8. Run your experiment
+## 8. Try prompts (interactive GPU)
+
+Find a good instruction before the full run. Start an interactive GPU session
+(15 minutes), then try your prompt on 50 dev examples:
+
+```bash
+srun --account=project_2021893 --partition=gputest --gres=gpu:gh200:1 \
+    --cpus-per-task=16 --mem=64G --time=00:15:00 --pty bash
+module load python-pytorch/2.13
+python3 try_prompt.py --config configs/my-task.json          # instruct, 5 examples
+python3 try_prompt.py --config configs/my-task.json --all    # all four prompts
+exit                                                         # free the GPU when done
+```
+
+Edit `TASK_SYSTEM` in `lab2lib/prompting.py` and run `try_prompt.py` again.
+Two or three tries are enough. The test set is not used, and every try is
+logged in `results/my-task/prompt-trials/log.jsonl` for your report.
+
+✓ A table of dev accuracy and some wrong answers.
+
+## 9. Run your experiment
 
 ```bash
 sbatch --partition=gpumedium --time=02:00:00 slurm/lab2.slurm configs/my-task.json
 ```
 
 Follow it as in step 4. It can take an hour or more, so submit it by
-minute 60 of the session.
+minute 60 of the session. **Do not edit `prompting.py` or the config until
+the job has finished**: the job reads them when it starts, which may be later
+than you submit.
 
-## 9. Read the results
+## 10. Read the results
 
 ```bash
 python3 summarize_results.py --config configs/my-task.json
@@ -174,12 +196,13 @@ python3 show_examples.py --config configs/my-task.json --run lora-sft --wrong
 - Open `results/my-task/loss.png`. If the training loss falls while the dev
   loss rises, try fewer epochs.
 
-## 10. Keep for the final report
+## 11. Keep for the final report
 
 - the table from `summarize_results.py`, with dataset, split sizes and models;
 - `configs/my-task.json`, `lab2lib/prompting.py` and the `results/my-task/` folder;
 - a short discussion: did fine-tuning beat the best prompt, at what cost, and
   what happened to general knowledge? A negative result is a valid result.
+
 ## If something goes wrong
 
 | Problem | Fix |
@@ -187,7 +210,7 @@ python3 show_examples.py --config configs/my-task.json --run lora-sft --wrong
 | no log file | `mkdir -p logs`, then submit again |
 | job waits as `PD` for long | `squeue --me --start` shows the estimated start |
 | job stops at the time limit | longer `--time`, or smaller dev and test sets |
-| `ModuleNotFoundError` | repeat step 3 |
+| `ModuleNotFoundError` | repeat step 3 (in an interactive session: `module load python-pytorch/2.13`) |
 | `KeyError` with a field name | `TASK_FIELDS` does not match your data; run `check_data.py` |
 | `CUDA out of memory` | in the config, halve `per_device_train_batch_size` and double `gradient_accumulation_steps` |
 | scores of 0 or 100, many `None` | read outputs with `show_examples.py` and check the labels |

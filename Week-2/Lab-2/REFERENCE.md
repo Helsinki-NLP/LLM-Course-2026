@@ -82,6 +82,16 @@ The base model receives this text directly. The instruct model receives
 through its own chat template. Fine-tuning trains the instruct model to answer
 `Label: <label>` to the zero-shot version of the prompt.
 
+### Trying prompts
+
+`try_prompt.py` scores the current prompt on the first 50 dev examples
+(`--limit` changes the number) without training anything. `--all` tries all
+four conditions; `--model base --shots 0` tries one specific condition;
+`--mock` checks the script without a GPU. Each try is appended to
+`<output_dir>/prompt-trials/log.jsonl` with the instruction and the score.
+Choose the prompt on dev only. The full job (README step 9) uses the
+instruction in `prompting.py` at the moment the job starts.
+
 ## Models and configuration
 
 The default models are `Qwen/Qwen3.5-0.8B-Base` and `Qwen/Qwen3.5-0.8B`. If
