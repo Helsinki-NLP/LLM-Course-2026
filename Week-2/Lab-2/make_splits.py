@@ -99,6 +99,11 @@ def main() -> None:
     dev, pool = pool[: args.dev], pool[args.dev :]
     train = pool[: args.train]
 
+    if not train or not dev or not test:
+        raise SystemExit(
+            f"Not enough examples: got {len(train)} train, {len(dev)} dev and "
+            f"{len(test)} test. Use smaller --train, --dev or --test values."
+        )
     if len(train) < args.train or len(dev) < args.dev or len(test) < args.test:
         print(
             "WARNING: not enough unique examples for the requested sizes; "

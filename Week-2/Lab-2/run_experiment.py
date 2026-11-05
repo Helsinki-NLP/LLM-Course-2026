@@ -21,8 +21,12 @@ from lab2lib.training import train
 from plot_losses import plot
 
 
-def run(config_path: str, fresh: bool = False) -> dict:
+def run(config_path: str, fresh: bool = False, mock: bool = False) -> dict:
     config = load_config(config_path)
+    if mock:
+        # Same data and prompts, but a fake model: no GPU and no downloads.
+        config["backend"] = "mock"
+        config.setdefault("plot", {})["format"] = "svg"
     destination = output_dir(config)
     if fresh and destination.exists():
         shutil.rmtree(destination)
@@ -53,8 +57,13 @@ def main() -> None:
         action="store_true",
         help="Remove this config's output directory before running.",
     )
+    parser.add_argument(
+        "--mock",
+        action="store_true",
+        help="Use a fake model to check data and prompts without a GPU.",
+    )
     args = parser.parse_args()
-    result = run(args.config, fresh=args.fresh)
+    result = run(args.config, fresh=args.fresh, mock=args.mock)
     print(json.dumps(result, indent=2, sort_keys=True))
 
 
