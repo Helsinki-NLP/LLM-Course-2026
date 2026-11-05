@@ -10,9 +10,9 @@ By default this scores the instruct model with few-shot examples on the first
 50 dev examples and shows some wrong answers. Edit TASK_SYSTEM in
 lab2lib/prompting.py and run it again. The test set is never used.
 
-Every try is logged in <output_dir>/prompt-trials/log.jsonl with the
-instruction, the condition and the dev score, so you can report which prompts
-you tried. Add --mock to check the script without a GPU.
+Every try is logged in <output_dir>-prompt-trials/log.jsonl (next to the
+results folder, so the full job does not delete it) with the instruction, the
+condition and the dev score. Add --mock to check the script without a GPU.
 """
 from __future__ import annotations
 
@@ -70,7 +70,9 @@ def main() -> None:
     else:
         plan = {args.model: [shots]}
 
-    trials_dir = output_dir(config) / "prompt-trials"
+    results = output_dir(config)
+    # Kept outside output_dir, which the full job deletes with --fresh.
+    trials_dir = results.with_name(results.name + "-prompt-trials")
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     print(f"Instruction (TASK_SYSTEM):\n  {prompting.TASK_SYSTEM}\n")
     print(f"Scoring {len(examples)} dev examples. The test set is not used.\n")

@@ -37,6 +37,7 @@ short discussion.
 ## 1. Get the files
 
 ```bash
+cd ~
 git clone https://github.com/Helsinki-NLP/LLM-Course-2026.git   # first time only
 cd ~/LLM-Course-2026 && git pull                                  # later updates
 cd ~/LLM-Course-2026/Week-2/Lab-2
@@ -94,6 +95,7 @@ prompt and settings) and **test** (only for the final scores).
 positive or negative.
 
 ```bash
+module load python-pytorch/2.13      # needed once per terminal
 python3 from_huggingface.py --dataset stanfordnlp/sst2 --out sst2.jsonl
 python3 make_splits.py --input sst2.jsonl --fields sentence --label-field label \
     --train 2000 --dev 300 --test 500 --out data/my-task
@@ -178,7 +180,7 @@ exit                                                         # free the GPU when
 
 Edit `TASK_SYSTEM` in `lab2lib/prompting.py` and run `try_prompt.py` again.
 Two or three tries are enough. The test set is not used, and every try is
-logged in `results/my-task/prompt-trials/log.jsonl` for your report.
+logged in `results/my-task-prompt-trials/log.jsonl` for your report.
 
 ✓ A table of dev accuracy and some wrong answers.
 
@@ -209,7 +211,8 @@ python3 show_examples.py --config configs/my-task.json --run lora-sft --wrong
 ## 11. Keep for the final report
 
 - the table from `summarize_results.py`, with dataset, split sizes and models;
-- `configs/my-task.json`, `lab2lib/prompting.py` and the `results/my-task/` folder;
+- `configs/my-task.json`, `lab2lib/prompting.py`, and the `results/my-task/` and
+  `results/my-task-prompt-trials/` folders;
 - a short discussion: did fine-tuning beat the best prompt, at what cost, and
   what happened to general knowledge? A negative result is a valid result.
 

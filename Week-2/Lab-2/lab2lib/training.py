@@ -68,7 +68,7 @@ def _train_huggingface(config: dict[str, Any]) -> dict[str, Any]:
     model = AutoModelForCausalLM.from_pretrained(
         spec["id"],
         revision=spec["revision"],
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
         trust_remote_code=spec.get("trust_remote_code", False),
     )
     resolved_revision = getattr(model.config, "_commit_hash", None)
@@ -101,7 +101,8 @@ def _train_huggingface(config: dict[str, Any]) -> dict[str, Any]:
         gradient_accumulation_steps=int(settings["gradient_accumulation_steps"]),
         learning_rate=float(settings["learning_rate"]),
         lr_scheduler_type=settings["lr_scheduler_type"],
-        warmup_ratio=float(settings["warmup_ratio"]),
+        # A value below 1 is a fraction of the training steps (transformers >= 5.2).
+        warmup_steps=float(settings["warmup_ratio"]),
         num_train_epochs=float(settings["num_train_epochs"]),
         logging_steps=int(settings["logging_steps"]),
         eval_strategy="steps",

@@ -88,7 +88,7 @@ through its own chat template. Fine-tuning trains the instruct model to answer
 (`--limit` changes the number) without training anything. `--all` tries all
 four conditions; `--model base --shots 0` tries one specific condition;
 `--mock` checks the script without a GPU. Each try is appended to
-`<output_dir>/prompt-trials/log.jsonl` with the instruction and the score.
+`<output_dir>-prompt-trials/log.jsonl` with the instruction and the score.
 Choose the prompt on dev only. The full job (README step 9) uses the
 instruction in `prompting.py` at the moment the job starts.
 
@@ -126,7 +126,9 @@ Models and datasets downloaded from Hugging Face go to `HF_HOME`, which README
 step 3 sets to `/scratch/project_2021893/$USER/hf`; the Slurm script uses the
 same location if `HF_HOME` is not set. Everything the lab produces, including
 the fine-tuned adapter, goes to the `output_dir` in your config, inside the lab
-directory.
+directory. Prompt tries from `try_prompt.py` go to a separate folder next to
+it (`<output_dir>-prompt-trials`), because the full job clears `output_dir`
+when it starts.
 
 ## Outputs
 

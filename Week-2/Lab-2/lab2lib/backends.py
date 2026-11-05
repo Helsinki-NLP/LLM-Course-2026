@@ -132,7 +132,7 @@ class HuggingFaceBackend:
         model = AutoModelForCausalLM.from_pretrained(
             spec["id"],
             revision=spec["revision"],
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             device_map="auto",
             trust_remote_code=spec.get("trust_remote_code", False),
         )
