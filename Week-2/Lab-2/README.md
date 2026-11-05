@@ -97,9 +97,11 @@ positive or negative.
 ```bash
 module load python-pytorch/2.13      # needed once per terminal
 python3 from_huggingface.py --dataset stanfordnlp/sst2 --out sst2.jsonl
-python3 make_splits.py --input sst2.jsonl --fields sentence --label-field label \
-    --train 2000 --dev 300 --test 500 --out data/my-task
+python3 make_splits.py --input sst2.jsonl --fields sentence --label-field label --out data/my-task
 ```
+
+This makes 2,000 train, 300 dev and 500 test examples. Change the sizes with
+`--train`, `--dev` and `--test`.
 
 Other tested datasets work the same way. Change the two commands and the
 `TASK_FIELDS` setting in step 6:
@@ -118,8 +120,7 @@ For RTE, write `TASK_FIELDS = ("sentence1", "sentence2")` and use
 your project): name the text column(s) and the label column.
 
 ```bash
-python3 make_splits.py --input mydata.csv --fields text --label-field label \
-    --train 2000 --dev 300 --test 500 --out data/my-task
+python3 make_splits.py --input mydata.csv --fields text --label-field label --out data/my-task
 ```
 
 ✓ `make_splits.py` prints the number of examples and the labels it found.
@@ -170,8 +171,7 @@ Find a good instruction before the full run. Start an interactive GPU session
 (15 minutes), then try your prompt on 50 dev examples:
 
 ```bash
-srun --account=project_2021893 --partition=gpuinteractive \
-    --gres=gpu:gh200:1 --time=00:15:00 --pty bash
+srun --account=project_2021893 --partition=gpuinteractive --gres=gpu:gh200:1 --time=00:15:00 --pty bash
 module load python-pytorch/2.13
 python3 try_prompt.py --config configs/my-task.json          # instruct, 5 examples
 python3 try_prompt.py --config configs/my-task.json --all    # all four prompts

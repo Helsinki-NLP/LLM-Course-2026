@@ -34,9 +34,7 @@ set must not influence any decision.
 by default) and adds IDs. To keep an official test file separate:
 
 ```bash
-python3 make_splits.py --input train.csv --test-input test.csv \
-    --fields premise hypothesis --label-field label \
-    --train 2000 --dev 300 --test 500 --out data/my-task
+python3 make_splits.py --input train.csv --test-input test.csv --fields premise hypothesis --label-field label --out data/my-task
 ```
 
 `check_data.py` reports missing fields, unknown labels, repeated IDs and
