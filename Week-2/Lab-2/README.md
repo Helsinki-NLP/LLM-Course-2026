@@ -9,6 +9,10 @@ Work through the steps in order. Run every command from the `Week-2/Lab-2`
 directory. Details are in [REFERENCE.md](REFERENCE.md); you do not need them
 to complete the lab.
 
+You do not have to finish in the lab session. The course project on Roihu
+(`project_2021893`, the same as in Lab 1) can be used at any time during the
+course, so you can continue or rerun the lab later.
+
 You need access to Roihu (see the [course README](../../README.md#roihu-access))
 and a **classification task**: each example has some text and one label from
 a fixed set, such as positive / negative. You do not need to create a
