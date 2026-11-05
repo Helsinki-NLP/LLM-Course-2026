@@ -99,7 +99,8 @@ Other tested datasets work the same way. Change the two commands and the
 | news topic | `fancyzhx/ag_news` | `text` | World, Sports, Business, Sci/Tech |
 | inference (two sentences) | `nyu-mll/glue --config rte` | `sentence1 sentence2` | entailment, not_entailment |
 
-RTE is small: use `--train 1500 --dev 300 --test 500`.
+For RTE, write `TASK_FIELDS = ("sentence1", "sentence2")` and use
+`--train 1500 --dev 300 --test 500`, because the dataset is small.
 
 **Option B — your own labelled file** (CSV, TSV or JSONL, for example from
 your project): name the text column(s) and the label column.
