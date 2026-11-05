@@ -80,8 +80,12 @@ def plot(config: dict) -> Path:
     rows = read_jsonl(metrics_path)
     train = _points(rows, "loss")
     evaluation = _points(rows, "eval_loss")
+    if not train and not evaluation:
+        print("WARNING: no losses were logged, so there is no loss plot.")
+        return metrics_path
     if not train or not evaluation:
-        raise ValueError("Both training and evaluation losses are required")
+        missing = "training" if not train else "dev"
+        print(f"WARNING: no {missing} loss was logged; the plot shows one curve only.")
     extension = config["plot"].get("format", "png").lower()
     destination = output_dir(config) / f"loss.{extension}"
     if extension == "svg":
@@ -93,8 +97,10 @@ def plot(config: dict) -> Path:
         import matplotlib.pyplot as plt
 
         figure, axis = plt.subplots(figsize=(8, 4.5))
-        axis.plot(*zip(*train), marker=".", label="train")
-        axis.plot(*zip(*evaluation), marker="o", label="evaluation")
+        if train:
+            axis.plot(*zip(*train), marker=".", label="train")
+        if evaluation:
+            axis.plot(*zip(*evaluation), marker="o", label="dev")
         axis.set(xlabel="step", ylabel="loss", title="LoRA SFT loss")
         axis.grid(alpha=0.25)
         axis.legend()
