@@ -15,7 +15,9 @@ TOKEN_PATTERN = re.compile(r"[a-z]+")
 
 
 def tokens(record: dict[str, Any]) -> list[str]:
-    text = f"{record.get('premise', '')} {record.get('hypothesis', '')}".lower()
+    from .prompting import TASK_FIELDS
+
+    text = " ".join(str(record.get(field, "")) for field in TASK_FIELDS).lower()
     return TOKEN_PATTERN.findall(text)
 
 
@@ -71,6 +73,9 @@ class MockBackend:
             label = self._adapter_prediction(record)
         elif demos and (nearest := self._nearest_demo(record, demos)):
             label = nearest
+        elif "hypothesis" not in record or "premise" not in record:
+            # Non-NLI task: the mock simply predicts the first label.
+            label = self.labels[0]
         else:
             hypothesis = record["hypothesis"].lower()
             premise = record["premise"].lower()

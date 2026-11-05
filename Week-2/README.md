@@ -20,15 +20,13 @@ Test whether fine-tuning improves on a strong prompting baseline:
 5. Compare general-knowledge performance before and after fine-tuning as a
    simple forgetting check.
 
-The runnable lab reference is in `Lab-2/`. Start with:
+Follow the step-by-step instructions in [`Lab-2/README.md`](Lab-2/README.md).
+They start with a smoke test that needs no GPU, run the bundled example on
+Roihu, and then show how to prepare your own data, adapt the prompt and run
+the full experiment. No new Python code is needed for a classification task.
 
-```bash
-cd Lab-2
-bash run_smoke_test.sh
-```
-
-Choose prompting settings on development data, lock the protocol, and then
-report results on the held-out test set. Reusing the Week 1 task is optional.
+Choose prompting settings on development data, fix them, and only then score
+the held-out test set. Reusing the Week 1 task is optional.
 
 Lab 2 starts from a matching pretrained base and instruct pair downloaded from
 Hugging Face (`Qwen/Qwen3.5-0.8B-Base` and `Qwen/Qwen3.5-0.8B` by default), not

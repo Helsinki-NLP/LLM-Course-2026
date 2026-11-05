@@ -4,6 +4,16 @@ import re
 from typing import Any
 
 
+# ---------------------------------------------------------------------------
+# Adapt these three things to your own task:
+#   1. TASK_FIELDS: the JSONL fields that make up one input item;
+#   2. TASK_SYSTEM: the instruction given to the model;
+#   3. the labels, which live in the config file under task.labels.
+# Every record also needs an "id" and a "label" field.
+# ---------------------------------------------------------------------------
+
+TASK_FIELDS = ("premise", "hypothesis")
+
 TASK_SYSTEM = (
     "Classify the relationship between the premise and hypothesis. "
     "Use exactly one of: entailment, neutral, contradiction. "
@@ -16,8 +26,12 @@ KNOWLEDGE_SYSTEM = (
 )
 
 
+def field_title(field: str) -> str:
+    return field.replace("_", " ").capitalize()
+
+
 def task_example(record: dict[str, Any], include_answer: bool) -> str:
-    text = f"Premise: {record['premise']}\nHypothesis: {record['hypothesis']}"
+    text = "\n".join(f"{field_title(field)}: {record[field]}" for field in TASK_FIELDS)
     if include_answer:
         text += f"\nLabel: {record['label']}"
     return text
@@ -42,15 +56,21 @@ def knowledge_prompt(record: dict[str, Any]) -> str:
 
 
 def extract_task_label(text: str, labels: list[str]) -> str | None:
+    """Return the label as written in the config, or None if none is found.
+
+    First look for an explicit "Label: <label>" line; otherwise take the label
+    that appears earliest in the output. Matching ignores upper/lower case.
+    """
     lowered = text.lower()
-    explicit = re.search(r"label\s*:\s*([a-z-]+)", lowered)
-    if explicit and explicit.group(1) in labels:
-        return explicit.group(1)
-    matches = [
-        (lowered.find(label), label)
-        for label in labels
-        if re.search(rf"\b{re.escape(label)}\b", lowered)
-    ]
+    canonical = {label.lower(): label for label in labels}
+    explicit = re.search(r"label\s*:\s*([^\s.,;:!?\"'()\[\]]+)", lowered)
+    if explicit and explicit.group(1) in canonical:
+        return canonical[explicit.group(1)]
+    matches = []
+    for lower, label in canonical.items():
+        found = re.search(rf"(?<!\w){re.escape(lower)}(?!\w)", lowered)
+        if found:
+            matches.append((found.start(), label))
     return min(matches)[1] if matches else None
 
 
