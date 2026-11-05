@@ -89,8 +89,17 @@ python3 make_splits.py --input sst2.jsonl --fields sentence --label-field label 
     --train 2000 --dev 300 --test 500 --out data/my-task
 ```
 
-Any other labelled dataset on Hugging Face works the same way: change
-`--dataset`, and use its text column(s) for `--fields`.
+Other tested datasets work the same way. Change the two commands and the
+`TASK_FIELDS` setting in step 6:
+
+| Task | `--dataset` | `--fields` and `TASK_FIELDS` | Labels |
+|---|---|---|---|
+| film review sentiment | `stanfordnlp/sst2` | `sentence` | negative, positive |
+| emotion in tweets | `dair-ai/emotion` | `text` | sadness, joy, love, anger, fear, surprise |
+| news topic | `fancyzhx/ag_news` | `text` | World, Sports, Business, Sci/Tech |
+| inference (two sentences) | `nyu-mll/glue --config rte` | `sentence1 sentence2` | entailment, not_entailment |
+
+RTE is small: use `--train 1500 --dev 300 --test 500`.
 
 **Option B — your own labelled file** (CSV, TSV or JSONL, for example from
 your project): name the text column(s) and the label column.
