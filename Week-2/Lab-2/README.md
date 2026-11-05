@@ -11,9 +11,8 @@ to complete the lab.
 
 You need access to Roihu (see the [course README](../../README.md#roihu-access))
 and a **classification task**: each example has some text and one label from
-a fixed set, such as positive / negative. No task yet? Use SST-2 (film review
-sentiment); [REFERENCE.md](REFERENCE.md#data-from-hugging-face) has the
-commands.
+a fixed set, such as positive / negative. You do not need to create a
+dataset: an existing labelled dataset is enough (step 5).
 
 ## What you need to do
 
@@ -75,27 +74,41 @@ python3 summarize_results.py --config configs/roihu.json   # when finished
 ✓ The log shows stages `1/6` to `6/6` and the table prints. The example data
 is tiny, so the scores mean nothing.
 
-## 5. Prepare your data
+## 5. Get your data
 
-Make train, dev and test files from one CSV, TSV or JSONL file. Name your
-input column(s) and your label column:
+You do **not** create a dataset. You take an existing labelled dataset and
+split it into three files: **train** (to learn from), **dev** (to choose the
+prompt and settings) and **test** (only for the final scores).
+
+**Option A — no data of your own yet:** use SST-2, film reviews labelled
+positive or negative.
+
+```bash
+python3 from_huggingface.py --dataset stanfordnlp/sst2 --out sst2.jsonl
+python3 make_splits.py --input sst2.jsonl --fields sentence --label-field label \
+    --train 2000 --dev 300 --test 500 --out data/my-task
+```
+
+Any other labelled dataset on Hugging Face works the same way: change
+`--dataset`, and use its text column(s) for `--fields`.
+
+**Option B — your own labelled file** (CSV, TSV or JSONL, for example from
+your project): name the text column(s) and the label column.
 
 ```bash
 python3 make_splits.py --input mydata.csv --fields text --label-field label \
     --train 2000 --dev 300 --test 500 --out data/my-task
 ```
 
-- **train**: examples to learn from; **dev**: for choosing the prompt and
-  settings; **test**: only for the final scores.
-- Labels should be words (`positive`), not numbers (`1`).
-- Data on Hugging Face? See [REFERENCE.md](REFERENCE.md#data-from-hugging-face).
+✓ `make_splits.py` prints the number of examples and the labels it found.
+Labels should be words (`positive`), not numbers (`1`).
 
 ## 6. Adapt the prompt
 
 Open `lab2lib/prompting.py` and change the two settings at the top:
 
 ```python
-TASK_FIELDS = ("text",)    # your input column(s); keep the comma for one column
+TASK_FIELDS = ("sentence",)    # your text column(s); keep the comma for one column
 TASK_SYSTEM = (
     "Is the review positive or negative? "
     "Use exactly one of: positive, negative. "

@@ -44,24 +44,18 @@ inputs that occur in more than one split.
 
 ### Data from Hugging Face
 
-Export the dataset to JSONL, converting numeric labels to their names. For
-example, for SST-2 (after the `module load` line from README step 3):
+`from_huggingface.py` downloads one split of a dataset and replaces numeric
+labels with their names:
 
 ```bash
-python3 - <<'EOF'
-from datasets import load_dataset
-data = load_dataset("stanfordnlp/sst2")["train"]        # replace with your dataset
-names = data.features["label"].names                    # ["negative", "positive"]
-data = data.map(lambda row: {"label_name": names[row["label"]]})
-data.to_json("sst2-train.jsonl")
-EOF
-python3 make_splits.py --input sst2-train.jsonl --fields sentence --label-field label_name \
-    --train 2000 --dev 300 --test 500 --out data/sst2
+python3 from_huggingface.py --dataset stanfordnlp/sst2 --split train --out sst2.jsonl
 ```
 
-This uses only the SST-2 training split, because its test labels are hidden.
-Check the dataset card for column names and whether the test split has
-labels.
+Use `--config` for datasets with several configurations and `--label-field`
+if the label column is not called `label`. Examples without a label, such as
+hidden test labels stored as `-1`, are skipped. Check the dataset card on
+Hugging Face for the column names. SST-2's test labels are hidden, so README
+step 5 splits its training set into train, dev and test.
 
 ## The prompt
 
