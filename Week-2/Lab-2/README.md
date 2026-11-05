@@ -24,7 +24,7 @@ short discussion.
 **If you want to go further** (pick any, after the minimum):
 
 - tune the learning rate, epochs or LoRA rank, one at a time ([REFERENCE.md](REFERENCE.md#tuning));
-- improve the prompt: a clearer instruction, or more or different few-shot examples;
+- improve the prompt: a clearer instruction, or more few-shot examples (`prompting.few_shot_count` in the config);
 - analyse the errors: which labels are confused, and what the wrong examples have in common;
 - try a larger base and instruct pair from the same model family;
 - compare languages, for example the same task in English and Finnish;
