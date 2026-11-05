@@ -6,6 +6,7 @@ from typing import Any
 
 from .backends import fit_mock_adapter
 from .common import (
+    resolved_revision,
     load_split,
     output_dir,
     project_path,
@@ -71,7 +72,7 @@ def _train_huggingface(config: dict[str, Any]) -> dict[str, Any]:
         dtype=torch.bfloat16,
         trust_remote_code=spec.get("trust_remote_code", False),
     )
-    resolved_revision = getattr(model.config, "_commit_hash", None)
+    model_revision = resolved_revision(spec["id"], spec["revision"], model.config)
     train = Dataset.from_list(
         [{"messages": messages_for_sft(record)} for record in load_split(config, "train")]
     )
@@ -144,7 +145,7 @@ def _train_huggingface(config: dict[str, Any]) -> dict[str, Any]:
         "backend": "huggingface",
         "model_id": spec["id"],
         "requested_model_revision": spec["revision"],
-        "resolved_model_revision": resolved_revision,
+        "resolved_model_revision": model_revision,
         "adapter_dir": str(adapter_dir),
         "metrics": str(metrics_path.relative_to(output_dir(config))),
         "trainable_parameters": trainable,

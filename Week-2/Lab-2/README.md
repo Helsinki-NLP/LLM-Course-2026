@@ -227,5 +227,6 @@ python3 show_examples.py --config configs/my-task.json --run lora-sft --wrong
 | `KeyError` with a field name | `TASK_FIELDS` does not match your data; run `check_data.py` |
 | `CUDA out of memory` | in the config, halve `per_device_train_batch_size` and double `gradient_accumulation_steps` |
 | scores of 0 or 100, many `None` | read outputs with `show_examples.py` and check the labels |
+| warnings about `flash-linear-attention` or `causal_conv1d` | harmless: the model runs correctly, only more slowly |
 
 Stuck for more than ten minutes? Ask.

@@ -103,6 +103,21 @@ def set_seed(seed: int, include_torch: bool = False) -> None:
             torch.cuda.manual_seed_all(seed)
 
 
+def resolved_revision(model_id: str, revision: str, model_config: Any = None) -> str | None:
+    """Return the Hugging Face commit hash of the downloaded model, if known."""
+    commit = getattr(model_config, "_commit_hash", None)
+    if commit:
+        return commit
+    try:
+        from huggingface_hub import try_to_load_from_cache
+
+        cached = try_to_load_from_cache(model_id, "config.json", revision=revision)
+    except Exception:
+        return None
+    # Cached files live in .../snapshots/<commit hash>/config.json
+    return Path(cached).parent.name if isinstance(cached, str) else None
+
+
 def result_path(config: dict[str, Any]) -> Path:
     return output_dir(config) / "results.json"
 

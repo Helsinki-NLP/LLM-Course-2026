@@ -8,7 +8,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from .common import project_path
+from .common import project_path, resolved_revision
 
 
 TOKEN_PATTERN = re.compile(r"[a-z]+")
@@ -142,7 +142,7 @@ class HuggingFaceBackend:
             model = PeftModel.from_pretrained(model, str(adapter_path))
         self.model = model.eval()
         base_config = getattr(model, "config", None)
-        self.resolved_revision = getattr(base_config, "_commit_hash", None)
+        self.resolved_revision = resolved_revision(spec["id"], spec["revision"], base_config)
         self.model_name = spec["id"]
 
     def _generate(self, user_prompt: str, system_prompt: str) -> str:
