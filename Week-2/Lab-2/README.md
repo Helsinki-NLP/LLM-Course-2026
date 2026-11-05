@@ -11,7 +11,25 @@ to complete the lab.
 
 You need access to Roihu (see the [course README](../../README.md#roihu-access))
 and a **classification task**: each example has some text and one label from
-a fixed set, such as positive / negative.
+a fixed set, such as positive / negative. No task yet? Use SST-2 (film review
+sentiment); [REFERENCE.md](REFERENCE.md#data-from-hugging-face) has the
+commands.
+
+## What you need to do
+
+**Minimum (enough for the report):** steps 1–10 once, with your own task and
+the default settings. That gives you the results table, the loss plot and a
+short discussion.
+
+**If you want to go further** (pick any, after the minimum):
+
+- tune the learning rate, epochs or LoRA rank, one at a time ([REFERENCE.md](REFERENCE.md#tuning));
+- improve the prompt: a clearer instruction, or more or different few-shot examples;
+- analyse the errors: which labels are confused, and what the wrong examples have in common;
+- try a larger base and instruct pair from the same model family;
+- compare languages, for example the same task in English and Finnish;
+- adapt the scorer to a task that is not classification ([REFERENCE.md](REFERENCE.md#tasks-that-are-not-classification));
+- try DPO or GRPO ([REFERENCE.md](REFERENCE.md#optional-extensions)).
 
 ## 1. Get the files
 
@@ -139,11 +157,6 @@ python3 show_examples.py --config configs/my-task.json --run lora-sft --wrong
 - `configs/my-task.json`, `lab2lib/prompting.py` and the `results/my-task/` folder;
 - a short discussion: did fine-tuning beat the best prompt, at what cost, and
   what happened to general knowledge? A negative result is a valid result.
-
-**Optional:** tune the learning rate, the epochs or the LoRA rank, one at a
-time, with a new `experiment_name` and `output_dir` for each run. See
-[REFERENCE.md](REFERENCE.md#tuning).
-
 ## If something goes wrong
 
 | Problem | Fix |

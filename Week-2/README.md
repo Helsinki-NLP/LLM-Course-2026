@@ -24,6 +24,8 @@ Follow the step-by-step instructions in [`Lab-2/README.md`](Lab-2/README.md).
 They start with a smoke test that needs no GPU, run the bundled example on
 Roihu, and then show how to prepare your own data, adapt the prompt and run
 the full experiment. No new Python code is needed for a classification task.
+The README lists the minimum needed for the report and optional extensions
+for students who want to go further.
 
 Choose prompting settings on development data, fix them, and only then score
 the held-out test set. Reusing the Week 1 task is optional.
