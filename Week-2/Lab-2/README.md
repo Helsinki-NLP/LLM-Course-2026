@@ -58,7 +58,13 @@ bash run_smoke_test.sh
 module purge
 module load python-pytorch/2.13
 python3 -m pip install --user -r requirements-roihu.txt
+echo 'export HF_HOME=/scratch/project_2021893/$USER/hf' >> ~/.bashrc
+source ~/.bashrc
 ```
+
+The last two lines store downloaded models and datasets on scratch instead of
+in your home directory. Your results and fine-tuned models stay in
+`results/`.
 
 ## 4. Run the example on a GPU
 

@@ -120,6 +120,14 @@ page. `decoding.max_new_tokens` (32) is enough for one label.
 - **Provenance:** `results.json` records the seed, split sizes, settings,
   model revisions and a hash of the configuration.
 
+## Where files are stored
+
+Models and datasets downloaded from Hugging Face go to `HF_HOME`, which README
+step 3 sets to `/scratch/project_2021893/$USER/hf`; the Slurm script uses the
+same location if `HF_HOME` is not set. Everything the lab produces, including
+the fine-tuned adapter, goes to the `output_dir` in your config, inside the lab
+directory.
+
 ## Outputs
 
 An output directory contains `results.json` (all scores and settings),
