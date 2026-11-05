@@ -6,7 +6,10 @@ the same test set. You also check whether fine-tuning made the model worse at
 general knowledge.
 
 Work through the steps in order. Run every command from the `Week-2/Lab-2`
-directory. Details are in [REFERENCE.md](REFERENCE.md); you do not need them
+directory, in an **SSH session on the GPU side of Roihu**
+(`ssh USERNAME@roihu-gpu.csc.fi`). The browser Jupyter terminal runs on a
+different kind of machine (x86), and jobs or packages set up there do not work
+on the GPUs. Details are in [REFERENCE.md](REFERENCE.md); you do not need them
 to complete the lab.
 
 You do not have to finish in the lab session: you can continue on your own
@@ -224,6 +227,7 @@ python3 show_examples.py --config configs/my-task.json --run lora-sft --wrong
 | job waits as `PD` for long | `squeue --me --start` shows the estimated start |
 | job stops at the time limit | longer `--time`, or smaller dev and test sets |
 | `ModuleNotFoundError` | repeat step 3 (in an interactive session: `module load python-pytorch/2.13`) |
+| `execve(): python3: No such file or directory`, or import errors after using Jupyter | you submitted or installed from the x86 side: use `ssh USERNAME@roihu-gpu.csc.fi`, repeat step 3 with `--force-reinstall`, and submit again |
 | `KeyError` with a field name | `TASK_FIELDS` does not match your data; run `check_data.py` |
 | `CUDA out of memory` | in the config, halve `per_device_train_batch_size` and double `gradient_accumulation_steps` |
 | scores of 0 or 100, many `None` | read outputs with `show_examples.py` and check the labels |

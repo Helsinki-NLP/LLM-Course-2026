@@ -15,6 +15,13 @@ cd "${SLURM_SUBMIT_DIR:?Submit this script with sbatch}"
 module purge
 module load python-pytorch/2.13
 
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "ERROR: python3 was not found after 'module load python-pytorch/2.13'." >&2
+  echo "Submit the job from the GPU side: ssh USERNAME@roihu-gpu.csc.fi" >&2
+  echo "(the browser Jupyter terminal runs on x86 and cannot submit this job)." >&2
+  exit 1
+fi
+
 # Downloaded models and datasets go to scratch, not to the home directory.
 export HF_HOME="${HF_HOME:-/scratch/project_2021893/${USER}/hf}"
 mkdir -p "${HF_HOME}"
