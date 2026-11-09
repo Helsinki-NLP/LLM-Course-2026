@@ -9,24 +9,11 @@ import re
 import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 
 
-GOLD = {
-    "nli-001": "entailment",
-    "nli-002": "contradiction",
-    "nli-003": "neutral",
-    "nli-004": "entailment",
-    "nli-005": "contradiction",
-    "nli-006": "neutral",
-    "nli-007": "entailment",
-    "nli-008": "contradiction",
-    "nli-009": "neutral",
-    "nli-010": "entailment",
-    "nli-011": "contradiction",
-    "nli-012": "neutral",
-}
-LABELS = ("entailment", "neutral", "contradiction")
+from lab3lib import DEFAULT_TASK_CONFIG, Task
 
 
 def parse_args() -> argparse.Namespace:
@@ -34,8 +21,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--precision", choices=["bf16", "fp8"], default="bf16")
-    parser.add_argument("--model", default="task")
-    parser.add_argument("--seed", type=int, default=20261112)
+    parser.add_argument("--task-config", type=Path, default=DEFAULT_TASK_CONFIG)
     parser.add_argument("--first-token-delay", type=float, default=0.003)
     parser.add_argument("--token-delay", type=float, default=0.0005)
     return parser.parse_args()
@@ -70,7 +56,7 @@ class Handler(BaseHTTPRequestHandler):
                     "object": "list",
                     "data": [
                         {
-                            "id": self.settings.model,
+                            "id": "task",
                             "object": "model",
                             "owned_by": "lab3-mock",
                         }
@@ -87,11 +73,11 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         try:
             body = json.loads(self.rfile.read(length))
-            text = body["messages"][-1]["content"]
+            text = "\n".join(message["content"] for message in body["messages"])
         except (json.JSONDecodeError, KeyError, TypeError):
             self.send_json(400, {"error": {"message": "invalid request"}})
             return
-        if body.get("model") != self.settings.model:
+        if body.get("model", "").split(":")[0] != "task":
             self.send_json(404, {"error": {"message": "unknown model"}})
             return
         output, token_parts = self.generate(text, body)
@@ -109,7 +95,7 @@ class Handler(BaseHTTPRequestHandler):
                 {
                     "id": f"chatcmpl-{uuid.uuid4().hex}",
                     "object": "chat.completion",
-                    "model": self.settings.model,
+                    "model": body["model"],
                     "choices": [
                         {
                             "index": 0,
@@ -126,22 +112,26 @@ class Handler(BaseHTTPRequestHandler):
             count = int(body.get("max_tokens", 16))
             parts = [f"token{i} " for i in range(count)]
             return "".join(parts), parts
-
-        match = re.search(r"Example ID:\s*(nli-\d+)", prompt)
-        example_id = match.group(1) if match else "nli-001"
-        label = GOLD[example_id]
-        number = int(example_id.rsplit("-", 1)[1])
-        if self.settings.precision == "fp8" and number % 5 == 0:
-            label = LABELS[(LABELS.index(label) + 1) % len(LABELS)]
-
-        wants_json = "Return only JSON" in prompt
-        constrained = "guided_json" in body or "structured_outputs" in body
-        if wants_json and not constrained and number % 4 == 0:
-            output = f"The label is {label}."  # Deliberately invalid JSON.
-        elif wants_json:
-            output = json.dumps({"label": label, "confidence": 0.9})
+        task: Task = self.server.task  # type: ignore[attr-defined]
+        index, example = next(
+            (
+                (number, row)
+                for number, row in enumerate(self.server.examples)  # type: ignore[attr-defined]
+                if task.prompting.task_example(row, include_answer=False) in prompt
+            ),
+            (0, self.server.examples[0]),  # type: ignore[attr-defined]
+        )
+        label = example["label"]
+        # Deliberate, deterministic differences so the smoke test can check them.
+        if self.settings.precision == "fp8" and index % 3 == 1:
+            label = task.labels[(task.labels.index(label) + 1) % len(task.labels)]
+        if "Answer with JSON only" in prompt:
+            if "response_format" not in body and index % 2 == 0:
+                output = f"The label is {label}."  # invalid JSON without a schema
+            else:
+                output = json.dumps({"label": label})
         else:
-            output = label
+            output = f"Label: {label}"
         return output, [output]
 
     def stream(
@@ -198,6 +188,8 @@ def main() -> None:
     args = parse_args()
     server = MockServer((args.host, args.port), Handler)
     server.settings = args  # type: ignore[attr-defined]
+    server.task = Task(args.task_config)  # type: ignore[attr-defined]
+    server.examples = server.task.test_examples()  # type: ignore[attr-defined]
     print(
         f"Mock server listening on http://{args.host}:{args.port}/v1 "
         f"(precision={args.precision})",

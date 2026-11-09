@@ -1,10 +1,8 @@
 {
-  "configuration": "mock-bf16",
-  "server": "bundled deterministic mock",
-  "model": "task",
-  "model_revision": "mock-v1",
-  "adapter_revision": "none",
-  "precision": "bf16",
-  "port": 8765,
-  "seed": 20261112
+  "label": "bf16",
+  "model": "mock",
+  "revision": "mock-v1",
+  "quantization": null,
+  "adapter": null,
+  "port": 8765
 }

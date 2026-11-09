@@ -3,4 +3,4 @@ __pycache__/
 .venv/
 .server/
 logs/
-results/smoke/
+results/

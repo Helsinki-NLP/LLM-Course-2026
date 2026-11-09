@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Build the compact speed-versus-quality table from experiment summaries."""
+"""Print the Lab 3 results as Markdown tables and write speed-quality.csv.
+
+Usage:
+    python3 summarize_results.py results/<run>
+"""
 
 from __future__ import annotations
 
@@ -9,100 +13,89 @@ import json
 from pathlib import Path
 from typing import Any
 
-from lab3lib import utc_now, write_json
+
+def read(path: Path) -> dict[str, Any] | None:
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--bf16-dir", type=Path, required=True)
-    parser.add_argument("--fp8-dir", type=Path, required=True)
-    parser.add_argument("--structured-dir", type=Path, required=True)
-    parser.add_argument("--output-dir", type=Path, required=True)
-    return parser.parse_args()
-
-
-def read(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def speed_row(benchmark: dict[str, Any], task: dict[str, Any]) -> dict[str, Any]:
-    levels = {int(level["concurrency"]): level for level in benchmark["levels"]}
-    c1 = levels[1]
-    return {
-        "configuration": benchmark["configuration"],
-        "ttft_ms_p50_c1": c1["ttft_ms_p50"],
-        "ttft_ms_p95_c1": c1["ttft_ms_p95"],
-        "tpot_ms_p50_c1": c1["tpot_ms_p50"],
-        "tpot_ms_p95_c1": c1["tpot_ms_p95"],
-        "output_tok_s_c1": levels[1]["output_tokens_per_second"],
-        "output_tok_s_c8": levels[8]["output_tokens_per_second"],
-        "output_tok_s_c32": levels[32]["output_tokens_per_second"],
-        "task_score": task["score"],
-        "invalid_rate": "",
-        "requests_per_level": benchmark["requests_per_level"],
-        "warmup_requests": benchmark["warmup_requests_discarded"],
-        "seed": benchmark["seed"],
-        "model": benchmark["model"],
-        "model_revision": benchmark["model_revision"],
-        "adapter_revision": benchmark["adapter_revision"],
-    }
+def num(value: Any, digits: int = 1) -> str:
+    return "–" if value is None else f"{value:.{digits}f}"
 
 
 def main() -> None:
-    args = parse_args()
-    bf16_benchmark = read(args.bf16_dir / "benchmark-summary.json")
-    fp8_benchmark = read(args.fp8_dir / "benchmark-summary.json")
-    bf16_task = read(args.bf16_dir / "task-summary.json")
-    fp8_task = read(args.fp8_dir / "task-summary.json")
-    structured = read(args.structured_dir / "structured-summary.json")
-    structured_modes = {item["mode"]: item for item in structured["modes"]}
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("results_dir", type=Path)
+    args = parser.parse_args()
+    root = args.results_dir
 
-    bf16 = speed_row(bf16_benchmark, bf16_task)
-    fp8 = speed_row(fp8_benchmark, fp8_task)
-    bf16["invalid_rate"] = structured_modes["free"]["invalid_rate"]
-    constrained = {
-        key: "" for key in bf16
-    }
-    constrained.update(
-        {
-            "configuration": f"{structured['configuration']} + JSON schema",
-            "task_score": structured_modes["schema"]["task_score"],
-            "invalid_rate": structured_modes["schema"]["invalid_rate"],
-            "seed": structured["seed"],
-            "model": structured["model"],
-            "model_revision": structured["model_revision"],
-            "adapter_revision": structured["adapter_revision"],
-        }
+    labels = [name for name in ("bf16", "fp8") if (root / name / "benchmark-summary.json").exists()]
+    if not labels:
+        raise SystemExit(f"No results found in {root}")
+
+    first = read(root / labels[0] / "benchmark-summary.json")
+    print(f"## Lab 3 results: {root}\n")
+    print(
+        f"Model: {first.get('model_id', first['model'])} (revision {first['model_revision']}). "
+        f"{first['requests_per_level']} requests per level, {first['max_tokens']} output tokens each, "
+        f"{first['warmup_requests_discarded']} warm-up requests discarded.\n"
     )
-    rows = [bf16, fp8, constrained]
 
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    with (args.output_dir / "speed-quality.csv").open(
-        "w", newline="", encoding="utf-8"
-    ) as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(bf16))
+    print("### Speed\n")
+    print("| Precision | Concurrency | Time to first token (ms, median) | Time per output token (ms, median) | Output tokens/s (all requests) | Failed |")
+    print("|---|---:|---:|---:|---:|---:|")
+    csv_rows = []
+    for label in labels:
+        benchmark = read(root / label / "benchmark-summary.json")
+        task = read(root / label / "task-summary.json") or {}
+        for level in benchmark["levels"]:
+            print(
+                f"| {label} | {level['concurrency']} | {num(level['ttft_ms_p50'])} | "
+                f"{num(level['tpot_ms_p50'], 2)} | {num(level['output_tokens_per_second'], 0)} | "
+                f"{level['requests_failed']} |"
+            )
+            csv_rows.append(
+                {
+                    "precision": label,
+                    "concurrency": level["concurrency"],
+                    "ttft_ms_p50": level["ttft_ms_p50"],
+                    "ttft_ms_p95": level["ttft_ms_p95"],
+                    "tpot_ms_p50": level["tpot_ms_p50"],
+                    "tpot_ms_p95": level["tpot_ms_p95"],
+                    "output_tokens_per_second": level["output_tokens_per_second"],
+                    "requests_failed": level["requests_failed"],
+                    "task_accuracy": task.get("score"),
+                }
+            )
+
+    print("\n### Quality on the test set\n")
+    print("| Precision | Accuracy (%) | Examples | No label found |")
+    print("|---|---:|---:|---:|")
+    for label in labels:
+        task = read(root / label / "task-summary.json")
+        if task:
+            print(
+                f"| {label} | {num(100 * task['score'])} | {task['example_count']} | {task['no_label']} |"
+            )
+
+    structured = read(root / "bf16" / "structured-summary.json")
+    if structured:
+        print("\n### JSON output (bf16)\n")
+        print("| Request | Invalid outputs (%) | Accuracy (%) |")
+        print("|---|---:|---:|")
+        names = {"free": "prompt only", "schema": "with JSON schema"}
+        for mode in structured["modes"]:
+            print(
+                f"| {names[mode['mode']]} | {num(100 * mode['invalid_rate'])} | "
+                f"{num(100 * mode['task_score'])} |"
+            )
+
+    with (root / "speed-quality.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(csv_rows[0]))
         writer.writeheader()
-        writer.writerows(rows)
-    write_json(
-        args.output_dir / "experiment-summary.json",
-        {
-            "created_at": utc_now(),
-            "compact_table": rows,
-            "notes": [
-                "Compact TTFT/TPOT columns use concurrency 1.",
-                "Per-concurrency latency percentiles remain in each benchmark-summary.json.",
-                "Schema decoding speed is blank because this protocol prioritizes syntax and score.",
-            ],
-            "source_summaries": {
-                "bf16_benchmark": str(args.bf16_dir / "benchmark-summary.json"),
-                "fp8_benchmark": str(args.fp8_dir / "benchmark-summary.json"),
-                "bf16_task": str(args.bf16_dir / "task-summary.json"),
-                "fp8_task": str(args.fp8_dir / "task-summary.json"),
-                "structured": str(args.structured_dir / "structured-summary.json"),
-            },
-        },
-    )
-    print(f"Wrote {args.output_dir / 'speed-quality.csv'}")
+        writer.writerows(csv_rows)
+    print(f"\nWrote {root / 'speed-quality.csv'}")
+    if "mock" in str(first.get("model_id")):
+        print("Note: mock server. These numbers test the pipeline and are not real measurements.")
 
 
 if __name__ == "__main__":

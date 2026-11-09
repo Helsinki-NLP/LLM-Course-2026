@@ -13,26 +13,36 @@ from pathlib import Path
 from threading import Event
 from typing import Any
 
-from lab3lib import percentile, streaming_completion, utc_now, write_json, write_jsonl
+from lab3lib import (
+    load_server_config,
+    percentile,
+    streaming_completion,
+    utc_now,
+    write_json,
+    write_jsonl,
+)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base-url", default="http://127.0.0.1:8000/v1")
-    parser.add_argument("--model", default="task")
-    parser.add_argument("--config-label", required=True)
     parser.add_argument("--server-config", type=Path, required=True)
-    parser.add_argument("--model-revision", default="main")
-    parser.add_argument("--adapter-revision", default="none")
     parser.add_argument("--prompts", type=Path, default=Path("configs/benchmark-prompts.txt"))
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--concurrency", type=int, nargs="+", default=[1, 8, 32])
     parser.add_argument("--requests-per-level", type=int, default=64)
     parser.add_argument("--warmup-requests", type=int, default=20)
     parser.add_argument("--max-tokens", type=int, default=128)
-    parser.add_argument("--seed", type=int, default=20261112)
+    parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--timeout", type=float, default=300.0)
-    return parser.parse_args()
+    args = parser.parse_args()
+    server = load_server_config(args.server_config)
+    args.base_url = f"http://127.0.0.1:{server['port']}/v1"
+    args.model = server["request_model"]
+    args.model_id = server["model"]
+    args.config_label = server["label"]
+    args.model_revision = server["revision"]
+    args.adapter = server.get("adapter")
+    return args
 
 
 def make_payload(args: argparse.Namespace, prompt: str, request_id: str) -> dict[str, Any]:
@@ -74,7 +84,7 @@ def run_one(
             "seed": args.seed,
             "model": args.model,
             "model_revision": args.model_revision,
-            "adapter_revision": args.adapter_revision,
+            "adapter": args.adapter,
             "status": "ok",
             **measured,
         }
@@ -86,7 +96,7 @@ def run_one(
             "seed": args.seed,
             "model": args.model,
             "model_revision": args.model_revision,
-            "adapter_revision": args.adapter_revision,
+            "adapter": args.adapter,
             "started_at": utc_now(),
             "status": "error",
             "error": f"{type(exc).__name__}: {exc}",
@@ -161,8 +171,9 @@ def main() -> None:
     summary = {
         "configuration": args.config_label,
         "model": args.model,
+        "model_id": args.model_id,
         "model_revision": args.model_revision,
-        "adapter_revision": args.adapter_revision,
+        "adapter": args.adapter,
         "seed": args.seed,
         "warmup_requests_discarded": args.warmup_requests,
         "requests_per_level": args.requests_per_level,

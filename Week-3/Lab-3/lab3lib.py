@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import math
 import time
@@ -12,8 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-
-LABELS = ("entailment", "neutral", "contradiction")
+LAB3_DIR = Path(__file__).resolve().parent
+DEFAULT_TASK_CONFIG = LAB3_DIR.parent.parent / "Week-2" / "Lab-2" / "configs" / "roihu.json"
 
 
 def utc_now() -> str:
@@ -151,59 +152,83 @@ def streaming_completion(
     }
 
 
-def task_prompt(row: dict[str, Any], json_output: bool = False) -> str:
-    ending = (
-        'Return only JSON with keys "label" and "confidence". '
-        f'"label" must be one of {list(LABELS)}.'
-        if json_output
-        else f"Reply with exactly one label: {', '.join(LABELS)}."
-    )
-    return (
-        "Classify the relation between the premise and hypothesis.\n"
-        f"Example ID: {row['id']}\n"
-        f"Premise: {row['premise']}\n"
-        f"Hypothesis: {row['hypothesis']}\n"
-        f"{ending}"
-    )
+def load_server_config(path: str | Path) -> dict[str, Any]:
+    """Read a server config and add the model name that requests should use."""
+    config = json.loads(Path(path).read_text(encoding="utf-8"))
+    adapter = config.get("adapter")
+    # SGLang selects a LoRA adapter with "<served model>:<adapter name>".
+    config["request_model"] = f"task:{adapter['name']}" if adapter else "task"
+    return config
 
 
-def extract_label(text: str) -> str | None:
-    lowered = text.strip().lower()
-    try:
-        value = json.loads(text)
-        if isinstance(value, dict):
-            lowered = str(value.get("label", "")).lower()
-    except json.JSONDecodeError:
-        pass
-    matches = [label for label in LABELS if label in lowered]
-    return matches[0] if len(matches) == 1 else None
+class Task:
+    """The Lab 2 task: labels, test data, prompt and scorer.
 
+    Lab 3 reuses the Lab 2 config and lab2lib/prompting.py unchanged, so the
+    quality comparison uses exactly the same prompt and scorer as Lab 2.
+    """
 
-def validate_task_json(text: str) -> tuple[bool, str | None]:
-    try:
-        value = json.loads(text)
-    except json.JSONDecodeError:
-        return False, "not_json"
-    if not isinstance(value, dict):
-        return False, "not_object"
-    if set(value) != {"label", "confidence"}:
-        return False, "wrong_fields"
-    if value["label"] not in LABELS:
-        return False, "invalid_label"
-    confidence = value["confidence"]
-    if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
-        return False, "invalid_confidence"
-    if not 0 <= confidence <= 1:
-        return False, "confidence_out_of_range"
-    return True, None
+    def __init__(self, config_path: str | Path) -> None:
+        self.config_path = Path(config_path).resolve()
+        self.lab2_dir = self.config_path.parent.parent
+        config = json.loads(self.config_path.read_text(encoding="utf-8"))
+        self.name = config["task"].get("name", "task")
+        self.labels: list[str] = list(config["task"]["labels"])
+        self.test_path = self.lab2_dir / config["data"]["test"]
+        self.prompting = self._load_prompting()
 
+    def _load_prompting(self):
+        path = self.lab2_dir / "lab2lib" / "prompting.py"
+        spec = importlib.util.spec_from_file_location("lab2_prompting", path)
+        if spec is None or spec.loader is None:
+            raise SystemExit(f"Cannot load the Lab 2 prompt from {path}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
 
-TASK_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "label": {"type": "string", "enum": list(LABELS)},
-        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-    },
-    "required": ["label", "confidence"],
-    "additionalProperties": False,
-}
+    def test_examples(self) -> list[dict[str, Any]]:
+        return load_jsonl(self.test_path)
+
+    def messages(self, record: dict[str, Any]) -> list[dict[str, str]]:
+        """The zero-shot Lab 2 prompt, as used for the fine-tuned model."""
+        return [
+            {"role": "system", "content": self.prompting.TASK_SYSTEM},
+            {"role": "user", "content": self.prompting.task_prompt(record, [])},
+        ]
+
+    def json_messages(self, record: dict[str, Any]) -> list[dict[str, str]]:
+        """The same item, but asking for a JSON answer."""
+        item = self.prompting.task_example(record, include_answer=False)
+        instruction = (
+            f"Answer with JSON only, in the form {{\"label\": \"<label>\"}}, "
+            f"where <label> is one of: {', '.join(self.labels)}."
+        )
+        return [
+            {"role": "system", "content": self.prompting.TASK_SYSTEM.split(" End with")[0]},
+            {"role": "user", "content": f"{item}\n\n{instruction}"},
+        ]
+
+    def extract(self, text: str) -> str | None:
+        return self.prompting.extract_task_label(text, self.labels)
+
+    def schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {"label": {"type": "string", "enum": self.labels}},
+            "required": ["label"],
+            "additionalProperties": False,
+        }
+
+    def check_json(self, text: str) -> tuple[bool, str | None, str | None]:
+        """Return (valid, reason if invalid, label)."""
+        try:
+            value = json.loads(text)
+        except json.JSONDecodeError:
+            return False, "not_json", None
+        if not isinstance(value, dict):
+            return False, "not_object", None
+        if set(value) != {"label"}:
+            return False, "wrong_fields", None
+        if value["label"] not in self.labels:
+            return False, "invalid_label", None
+        return True, None, value["label"]

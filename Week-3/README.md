@@ -2,34 +2,26 @@
 
 ## Lecture overview
 
-The lecture follows a model from a prompt to generated tokens. It separates
-prefill from decode, explains KV-cache memory and continuous batching, and
-introduces prefix caching, FP8 and weight-only quantization, speculative
-decoding, constrained output and the trade-off between latency, throughput
-and quality.
+The lecture follows a request from the prompt to the generated tokens. It
+separates reading the prompt (prefill) from writing the answer (decode),
+explains why the KV cache and batching decide how many users a GPU can serve,
+and introduces FP8 quantization, prefix caching, speculative decoding and
+constrained (JSON) output. The examples use the SGLang inference engine.
 
 ## Lab 3 assignment
 
-Serve a model and measure a controlled inference workload:
+Serve your Lab 2 model with SGLang and measure it:
 
-1. Start an OpenAI-compatible vLLM server in bf16.
-2. Measure time to first token, time per output token and aggregate throughput
-   at concurrency 1, 8 and 32.
-3. Repeat the same measurements in FP8.
-4. Score bf16 and FP8 with the same held-out task and metric.
-5. Compare prompt-only JSON generation with schema-constrained generation,
-   reporting both invalid-output rate and task score.
+1. Measure time to first token, time per output token and throughput with 1,
+   8 and 32 parallel requests.
+2. Repeat the measurements with FP8 weights.
+3. Score bf16 and FP8 on your Lab 2 test set with the Lab 2 scorer.
+4. Compare JSON answers with and without a JSON schema.
 
-The runnable lab reference is in `Lab-3/`. Start with:
+Follow the step-by-step instructions in [`Lab-3/README.md`](Lab-3/README.md).
+One GPU job runs the whole experiment. The README lists the minimum needed for
+the report and optional extensions.
 
-```bash
-cd Lab-3
-bash run_smoke_test.sh
-```
-
-The Lab 2 adapter is optional. You may serve another suitable model, provided
-the bf16 and FP8 measurements use the same model, task and evaluation protocol.
-
-Keep the raw request logs, summaries, server configurations and a
-speed-versus-quality recommendation for the inference section of the final
-report.
+Keep the three result tables, the raw results and a short recommendation
+(bf16 or FP8, with or without a schema) for the inference section of the
+final report.
