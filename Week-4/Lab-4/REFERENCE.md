@@ -1,4 +1,4 @@
-# Lab 3 reference
+# Lab 4 reference
 
 Background for [README.md](README.md). You do not need to read this to
 complete the lab.
@@ -23,7 +23,7 @@ Both scripts, `benchmark.py` and `score_task.py`, take `--backend hf` or
 `--backend server`, and read the model from `configs/model.json`.
 
 **`--backend hf`** loads the model with `transformers` in the same Python
-process (`lab3lib.HFBackend`) and calls `model.generate()` on a padded batch.
+process (`lab4lib.HFBackend`) and calls `model.generate()` on a padded batch.
 
 - With concurrency *n*, the benchmark runs batches of *n* prompts.
 - TTFT is measured by generating one token for the batch; the full answer is
@@ -33,7 +33,7 @@ process (`lab3lib.HFBackend`) and calls `model.generate()` on a padded batch.
   is done.
 
 **`--backend server`** sends HTTP requests to the vLLM server
-(`lab3lib.ServerBackend`).
+(`lab4lib.ServerBackend`).
 
 - With concurrency *n*, *n* requests are in flight at the same time.
 - Answers are streamed: TTFT is the time until the first piece of text
@@ -113,7 +113,7 @@ The core steps (3 and 4) also run unattended:
 
 ```bash
 mkdir -p logs
-sbatch slurm/lab3.slurm ../../Week-2/Lab-2/configs/my-task.json
+sbatch slurm/lab4.slurm ../../Week-2/Lab-2/configs/my-task.json
 ```
 
 The results go to `results/job-JOBID/`.

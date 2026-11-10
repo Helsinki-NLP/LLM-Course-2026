@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 
-from lab3lib import DEFAULT_TASK_CONFIG, Task
+from lab4lib import DEFAULT_TASK_CONFIG, Task
 
 
 def parse_args() -> argparse.Namespace:
@@ -29,7 +29,7 @@ def parse_args() -> argparse.Namespace:
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
-    server_version = "Lab3Mock/1.0"
+    server_version = "Lab4Mock/1.0"
 
     def log_message(self, format_string: str, *args: Any) -> None:
         return
@@ -58,7 +58,7 @@ class Handler(BaseHTTPRequestHandler):
                         {
                             "id": "task",
                             "object": "model",
-                            "owned_by": "lab3-mock",
+                            "owned_by": "lab4-mock",
                         }
                     ],
                 },

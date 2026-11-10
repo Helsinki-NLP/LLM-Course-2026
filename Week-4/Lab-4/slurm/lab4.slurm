@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=lab3
+#SBATCH --job-name=lab4
 #SBATCH --account=project_2021893
 #SBATCH --partition=gputest
 #SBATCH --nodes=1
@@ -10,7 +10,7 @@
 #SBATCH --output=logs/%x-%j.out
 
 # Optional: the core lab steps as an unattended job.
-# Usage: sbatch slurm/lab3.slurm [LAB2_CONFIG]
+# Usage: sbatch slurm/lab4.slurm [LAB2_CONFIG]
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:?Submit this script with sbatch}"
 if [[ "$(uname -m)" != "aarch64" ]]; then

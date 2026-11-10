@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from lab3lib import load_jsonl
+from lab4lib import load_jsonl
 
 
 def main() -> None:

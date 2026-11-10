@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Print all Lab 3 results as Markdown tables.
+"""Print all Lab 4 results as Markdown tables.
 
 Usage:
     python3 summarize_results.py results

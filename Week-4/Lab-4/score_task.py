@@ -15,7 +15,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from lab3lib import (
+from lab4lib import (
     DEFAULT_TASK_CONFIG,
     Task,
     load_model_config,

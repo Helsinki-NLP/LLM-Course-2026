@@ -1,2 +1,2 @@
-# The Lab 3 client scripts use only the Python standard library.
+# The Lab 4 client scripts use only the Python standard library.
 # The SGLang server runs in its own environment: see scripts/install_sglang.sh.

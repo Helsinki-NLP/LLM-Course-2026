@@ -18,7 +18,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from lab3lib import (
+from lab4lib import (
     DEFAULT_TASK_CONFIG,
     Task,
     chat_completion,

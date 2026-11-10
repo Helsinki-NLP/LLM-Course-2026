@@ -1,4 +1,4 @@
-"""Small, dependency-free helpers shared by the Lab 3 programs."""
+"""Small, dependency-free helpers shared by the Lab 4 programs."""
 
 from __future__ import annotations
 
@@ -13,8 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-LAB3_DIR = Path(__file__).resolve().parent
-DEFAULT_TASK_CONFIG = LAB3_DIR.parent.parent / "Week-2" / "Lab-2" / "configs" / "roihu.json"
+LAB4_DIR = Path(__file__).resolve().parent
+DEFAULT_TASK_CONFIG = LAB4_DIR.parent.parent / "Week-2" / "Lab-2" / "configs" / "roihu.json"
 
 
 def utc_now() -> str:
@@ -164,7 +164,7 @@ def load_model_config(path: str | Path) -> dict[str, Any]:
 class Task:
     """The Lab 2 task: labels, test data, prompt and scorer.
 
-    Lab 3 reuses the Lab 2 config and lab2lib/prompting.py unchanged, so the
+    Lab 4 reuses the Lab 2 config and lab2lib/prompting.py unchanged, so the
     quality comparison uses exactly the same prompt and scorer as Lab 2.
     """
 

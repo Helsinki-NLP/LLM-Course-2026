@@ -12,7 +12,7 @@ Course materials for the 2026 University of Helsinki course.
 - **Lectures:** Tuesdays 16:15–17:45, Metsätalo B525 (sali 25)
 - **Labs:** Thursdays 16:15–17:45, Metsätalo B314 (sali 7)
 - **Audience:** Master's students in language technology and data science
-- **Teachers:** Aarne Talman (weeks 1–3 and 7), Jussi Karlgren (week 4),
+- **Teachers:** Aarne Talman (weeks 1, 2, 4 and 7), Jussi Karlgren (week 3),
   Dmitry Kan (weeks 5–6)
 - **Computing:** CSC Roihu, using course project `project_2021893`
 - **Assessment:** final project, consisting of a PDF report and ZIP code archive
@@ -61,15 +61,15 @@ After the course, students should be able to:
 - Tuesday: Post-training
 - Thursday: Lab 2 — does fine-tuning beat prompting?
 
-### Week 3 — 10 and 12 November — Aarne Talman
-
-- Tuesday: Inference
-- Thursday: Lab 3 — serve and measure your model
-
-### Week 4 — 17 and 19 November — Jussi Karlgren
+### Week 3 — 10 and 12 November — Jussi Karlgren
 
 - Tuesday: Evaluation
-- Thursday: Lab 4 — evaluate your models
+- Thursday: Lab 3 — evaluate your models
+
+### Week 4 — 17 and 19 November — Aarne Talman
+
+- Tuesday: Inference
+- Thursday: Lab 4 — serve and measure your model
 
 ### Week 5 — 24 and 26 November — Dmitry Kan
 
@@ -129,8 +129,9 @@ Slurm batch jobs for longer runs.
 
 - `Week-1`: language-model foundations, pretraining and Lab 1
 - `Week-2`: post-training and Lab 2
-- `Week-3`: inference and Lab 3
-- `Week-4`–`Week-7`: directories reserved for later course materials
+- `Week-3`: evaluation and Lab 3 (materials will be added before the week)
+- `Week-4`: inference and Lab 4
+- `Week-5`–`Week-7`: directories reserved for later course materials
 
 Each completed week contains:
 

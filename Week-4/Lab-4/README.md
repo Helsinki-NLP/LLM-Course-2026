@@ -1,4 +1,4 @@
-# Lab 3: Hugging Face versus an inference engine
+# Lab 4: Hugging Face versus an inference engine
 
 You run the same model in two ways and compare them:
 
@@ -14,7 +14,7 @@ small experiment of your own.
 
 Everything runs **interactively** in one GPU session; each command takes
 seconds to a few minutes. This README uses ready-made scripts. The notebook
-[`lab3.ipynb`](lab3.ipynb) does the same steps with all the code written out
+[`lab4.ipynb`](lab4.ipynb) does the same steps with all the code written out
 in its cells, so you can read and change how the model is loaded, how the
 server is called and how speed and accuracy are measured. Details are in
 [REFERENCE.md](REFERENCE.md).
@@ -33,7 +33,7 @@ adapter, or running everything as a batch job (see the end).
 ```bash
 ssh USERNAME@roihu-gpu.csc.fi
 cd ~/LLM-Course-2026 && git pull
-cd ~/LLM-Course-2026/Week-3/Lab-3
+cd ~/LLM-Course-2026/Week-4/Lab-4
 bash run_smoke_test.sh
 ```
 
@@ -52,7 +52,7 @@ python3 -m pip install --user -r ../../Week-2/Lab-2/requirements-roihu.txt
 
 ```bash
 srun --account=project_2021893 --partition=gpuinteractive --gres=gpu:gh200:1 --time=01:00:00 --pty bash
-cd ~/LLM-Course-2026/Week-3/Lab-3
+cd ~/LLM-Course-2026/Week-4/Lab-4
 TASK=../../Week-2/Lab-2/configs/my-task.json
 ```
 

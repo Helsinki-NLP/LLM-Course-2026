@@ -23,7 +23,7 @@ from pathlib import Path
 from threading import Event
 from typing import Any
 
-from lab3lib import (
+from lab4lib import (
     load_model_config,
     make_backend,
     percentile,

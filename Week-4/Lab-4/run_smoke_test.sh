@@ -1,5 +1,5 @@
 #!/bin/bash
-# Test every Lab 3 script with fake models: no GPU, no downloads.
+# Test every Lab 4 script with fake models: no GPU, no downloads.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
