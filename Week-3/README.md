@@ -6,7 +6,7 @@ Principles for evaluation of generative language models.
 
 ## Lab 3 assignment
 
-The assignment is the [ELOQUENT 2026 Cultural diversity and robustness](https://eloquent-lab.github.io/2026archive/task-cultural-robustness/) task (but don't submit the experiment).
+The assignment is the [ELOQUENT 2026 Cultural diversity and robustness](https://eloquent-lab.github.io/2026archive/task-cultural-robustness/) task (but instead of submitting to the task organisers, write a lab report).
 
 * Pick a language that you know well (not English) 
 * Pick an LLM readily accessible to you (which can handle the language you picked above)
@@ -19,6 +19,7 @@ The assignment is the [ELOQUENT 2026 Cultural diversity and robustness](https://
 * You may do this in pairs or groups! One language per person, though!
 * For extra gold stars, translate the 100 questions into some language that they are not in yet!
 * For even more extra gold stars, suggest some new questions to extend the test!
+* Write a brief report of your findings. Did you find or did you not find interesting differences?
 
 
 [ELOQUENT home page](https://eloquent-lab.github.io/)
