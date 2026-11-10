@@ -13,8 +13,11 @@ on your Lab 2 test set, with the Lab 2 prompt and scorer). Then you design one
 small experiment of your own.
 
 Everything runs **interactively** in one GPU session; each command takes
-seconds to a few minutes. The same steps are in the notebook
-[`lab3.ipynb`](lab3.ipynb). Details are in [REFERENCE.md](REFERENCE.md).
+seconds to a few minutes. This README uses ready-made scripts. The notebook
+[`lab3.ipynb`](lab3.ipynb) does the same steps with all the code written out
+in its cells, so you can read and change how the model is loaded, how the
+server is called and how speed and accuracy are measured. Details are in
+[REFERENCE.md](REFERENCE.md).
 
 ## What you need to do
 

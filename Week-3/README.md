@@ -20,7 +20,7 @@ inference engine, interactively in one GPU session:
 4. Design and run one small experiment of your own.
 
 Follow the step-by-step commands in [`Lab-3/README.md`](Lab-3/README.md) or
-the notebook `Lab-3/lab3.ipynb`. FP8 weights and JSON output with a schema
+the notebook `Lab-3/lab3.ipynb`, which shows all the code in its cells. FP8 weights and JSON output with a schema
 are optional extensions.
 
 Keep the result tables, your experiment and a short discussion (when is an
