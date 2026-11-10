@@ -28,8 +28,8 @@ After the course, students should be able to:
 2. train a tokenizer and a small language model, and interpret training and
    scaling results;
 3. compare prompting with supervised and preference-based post-training;
-4. serve a model and measure latency, throughput, memory use and quality;
-5. evaluate language models critically, including multilingual evaluation;
+4. evaluate language models critically, including multilingual evaluation;
+5. serve a model and measure latency, throughput, memory use and quality;
 6. build retrieval-augmented and tool-using systems around a model; and
 7. run machine-learning workloads on an HPC system using modules and Slurm.
 
@@ -41,9 +41,10 @@ After the course, students should be able to:
   training
 - **Post-training:** chat templates, supervised fine-tuning, preferences,
   verifiable rewards and LoRA
-- **Inference:** decoding, KV-cache memory, batching, quantization and serving
 - **Evaluation:** metrics, benchmarks, contamination, model-based evaluation
   and multilingual variation
+- **Inference:** decoding, KV-cache memory, batching, quantization, constrained
+  decoding and serving
 - **Retrieval-augmented generation:** retrieval, reranking, context assembly
   and RAG evaluation
 - **Agents:** tool use, agent loops, context management, memory and failure modes
