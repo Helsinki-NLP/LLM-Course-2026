@@ -65,7 +65,7 @@ def main() -> None:
             print("| Request | Invalid (%) | Accuracy (%) |")
             print("|---|---:|---:|")
             for mode in structured["modes"]:
-                name = {"free": "prompt only", "schema": "with JSON schema"}[mode["mode"]]
+                name = {"free": "prompt only", "schema": "with JSON schema", "schema-reasoning": "schema, reasoning first"}[mode["mode"]]
                 print(f"| {name} | {num(100 * mode['invalid_rate'])} | {num(100 * mode['task_score'])} |")
 
     if speed_rows:

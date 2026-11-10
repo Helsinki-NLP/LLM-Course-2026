@@ -167,7 +167,10 @@ python3 benchmark.py --backend server --config configs/model-fp8.json --output-d
 python3 score_task.py --backend server --config configs/model-fp8.json --task-config $TASK --output-dir results/vllm-fp8
 ```
 
-**JSON with a schema.** Ask for `{"label": ...}` with and without a JSON schema:
+**JSON with a schema.** Ask for the answer as JSON in three ways: described in
+the prompt only, enforced with a JSON schema, and enforced with a `reasoning`
+field before the `label` (the lecture's advice to let the model reason first).
+The script prints the invalid-output rate and the accuracy for each:
 ```bash
 python3 evaluate_structured.py --task-config $TASK --output-dir results/vllm-json
 ```

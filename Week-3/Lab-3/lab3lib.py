@@ -196,13 +196,25 @@ class Task:
             {"role": "user", "content": self.prompting.task_prompt(record, [])},
         ]
 
-    def json_messages(self, record: dict[str, Any]) -> list[dict[str, str]]:
-        """The same item, but asking for a JSON answer."""
+    def json_messages(self, record: dict[str, Any], reasoning: bool = False) -> list[dict[str, str]]:
+        """The same item, but asking for a JSON answer.
+
+        With reasoning=True the model is asked to explain first, in a
+        "reasoning" field, and to give the label after it.
+        """
         item = self.prompting.task_example(record, include_answer=False)
-        instruction = (
-            f"Answer with JSON only, in the form {{\"label\": \"<label>\"}}, "
-            f"where <label> is one of: {', '.join(self.labels)}."
-        )
+        if reasoning:
+            instruction = (
+                "Answer with JSON only, in the form "
+                "{\"reasoning\": \"<one or two sentences>\", \"label\": \"<label>\"}, "
+                f"where <label> is one of: {', '.join(self.labels)}. "
+                "Write the reasoning first."
+            )
+        else:
+            instruction = (
+                f"Answer with JSON only, in the form {{\"label\": \"<label>\"}}, "
+                f"where <label> is one of: {', '.join(self.labels)}."
+            )
         return [
             {"role": "system", "content": self.prompting.TASK_SYSTEM.split(" End with")[0]},
             {"role": "user", "content": f"{item}\n\n{instruction}"},
@@ -211,15 +223,22 @@ class Task:
     def extract(self, text: str) -> str | None:
         return self.prompting.extract_task_label(text, self.labels)
 
-    def schema(self) -> dict[str, Any]:
+    def schema(self, reasoning: bool = False) -> dict[str, Any]:
+        """JSON schema for the answer. With reasoning=True, a free-text
+        "reasoning" field comes before the label (fields are generated in
+        this order)."""
+        properties: dict[str, Any] = {}
+        if reasoning:
+            properties["reasoning"] = {"type": "string"}
+        properties["label"] = {"type": "string", "enum": self.labels}
         return {
             "type": "object",
-            "properties": {"label": {"type": "string", "enum": self.labels}},
-            "required": ["label"],
+            "properties": properties,
+            "required": list(properties),
             "additionalProperties": False,
         }
 
-    def check_json(self, text: str) -> tuple[bool, str | None, str | None]:
+    def check_json(self, text: str, reasoning: bool = False) -> tuple[bool, str | None, str | None]:
         """Return (valid, reason if invalid, label)."""
         try:
             value = json.loads(text)
@@ -227,7 +246,7 @@ class Task:
             return False, "not_json", None
         if not isinstance(value, dict):
             return False, "not_object", None
-        if set(value) != {"label"}:
+        if set(value) != ({"reasoning", "label"} if reasoning else {"label"}):
             return False, "wrong_fields", None
         if value["label"] not in self.labels:
             return False, "invalid_label", None

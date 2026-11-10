@@ -40,6 +40,7 @@ for run in ("hf", "vllm"):
     assert json.loads((root / run / "eval-summary.json").read_text())["accuracy"] == 1.0
 modes = {m["mode"]: m for m in json.loads((root / "vllm" / "structured-summary.json").read_text())["modes"]}
 assert modes["free"]["invalid_rate"] > 0 and modes["schema"]["invalid_rate"] == 0
+assert modes["schema-reasoning"]["invalid_rate"] == 0
 print("Smoke checks passed.")
 PY
 echo "Local smoke test completed."

@@ -122,7 +122,9 @@ class Handler(BaseHTTPRequestHandler):
         # Deliberate, deterministic differences so the smoke test can check them.
         if self.settings.precision == "fp8" and index % 3 == 1:
             label = task.labels[(task.labels.index(label) + 1) % len(task.labels)]
-        if "Answer with JSON only" in prompt:
+        if "Answer with JSON only" in prompt and '"reasoning"' in prompt:
+            output = json.dumps({"reasoning": "The hypothesis follows the premise.", "label": label})
+        elif "Answer with JSON only" in prompt:
             if "response_format" not in body and index % 2 == 0:
                 output = f"The label is {label}."  # invalid JSON without a schema
             else:
