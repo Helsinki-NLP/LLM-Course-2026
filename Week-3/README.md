@@ -6,7 +6,7 @@ The lecture follows a request from the prompt to the generated tokens. It
 separates reading the prompt (prefill) from writing the answer (decode),
 explains why the KV cache and batching decide how many users a GPU can serve,
 and introduces FP8 quantization, prefix caching, speculative decoding and
-constrained (JSON) output. The examples use the SGLang inference engine.
+constrained (JSON) output.
 
 ## Lab 3 assignment
 
