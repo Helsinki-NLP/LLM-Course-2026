@@ -3,10 +3,14 @@
 ## Lecture overview
 
 The lecture follows a request from the prompt to the generated tokens. It
-separates reading the prompt (prefill) from writing the answer (decode),
-explains why the KV cache and batching decide how many users a GPU can serve,
-and introduces FP8 quantization, prefix caching, speculative decoding and
-constrained (JSON) output.
+covers how the next token is chosen, separates reading the prompt (prefill)
+from writing the answer (decode), and explains why the KV cache and batching
+decide how many users a GPU can serve. It then covers prefix caching,
+quantization and constrained decoding (labels, JSON, grammars), and ends with
+three topics for language technology: tokens per word across languages,
+classifying by scoring the labels, and why greedy decoding is not always
+reproducible. FP8 and INT4 details, speculative decoding, PagedAttention and
+the cost of serving are in the appendix.
 
 ## Lab 3 assignment
 
