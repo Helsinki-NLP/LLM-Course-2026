@@ -1,24 +1,31 @@
 #!/bin/bash
-# The whole Lab 3 experiment: for bf16 and then fp8, start the server,
-# measure speed, score the test set, and stop the server.
-# Usage: bash scripts/run_experiment.sh OUTPUT_DIR [LAB2_CONFIG]
+# Optional: run the core lab steps without typing them (Hugging Face, then vLLM).
+# Usage: bash scripts/run_experiment.sh RESULTS_DIR [LAB2_CONFIG]
+# The interactive steps in README.md do the same thing one by one.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
-OUTPUT="${1:?usage: run_experiment.sh OUTPUT_DIR [LAB2_CONFIG]}"
-TASK_CONFIG="${2:-../../Week-2/Lab-2/configs/roihu.json}"
+OUT="${1:?usage: run_experiment.sh RESULTS_DIR [LAB2_CONFIG]}"
+TASK="${2:-../../Week-2/Lab-2/configs/roihu.json}"
 trap 'bash scripts/stop_server.sh >/dev/null 2>&1 || true' EXIT
+if ! command -v module >/dev/null 2>&1 && [[ -f /etc/profile.d/modules.sh ]]; then
+  source /etc/profile.d/modules.sh
+fi
+export HF_HOME="${HF_HOME:-/scratch/project_2021893/${USER}/hf}"
 
-for LABEL in bf16 fp8; do
-  echo "=== $LABEL ==="
-  bash scripts/start_server.sh "configs/$LABEL.json"
-  python3 benchmark.py --server-config "configs/$LABEL.json" --output-dir "$OUTPUT/$LABEL"
-  python3 score_task.py --server-config "configs/$LABEL.json" --task-config "$TASK_CONFIG" --output-dir "$OUTPUT/$LABEL"
-  if [[ "$LABEL" == "bf16" ]]; then
-    python3 evaluate_structured.py --server-config "configs/$LABEL.json" --task-config "$TASK_CONFIG" --output-dir "$OUTPUT/$LABEL"
-  fi
-  bash scripts/stop_server.sh
-done
+echo "=== Hugging Face ==="
+(
+  module purge
+  module load python-pytorch/2.13
+  python3 benchmark.py --backend hf --output-dir "$OUT/hf"
+  python3 score_task.py --backend hf --task-config "$TASK" --output-dir "$OUT/hf"
+)
 
-python3 summarize_results.py "$OUTPUT"
+echo "=== vLLM ==="
+bash scripts/start_server.sh configs/model.json
+python3 benchmark.py --backend server --output-dir "$OUT/vllm"
+python3 score_task.py --backend server --task-config "$TASK" --output-dir "$OUT/vllm"
+bash scripts/stop_server.sh
+
+python3 summarize_results.py "$OUT"

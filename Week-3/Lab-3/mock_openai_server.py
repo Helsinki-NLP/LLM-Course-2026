@@ -77,9 +77,6 @@ class Handler(BaseHTTPRequestHandler):
         except (json.JSONDecodeError, KeyError, TypeError):
             self.send_json(400, {"error": {"message": "invalid request"}})
             return
-        if body.get("model", "").split(":")[0] != "task":
-            self.send_json(404, {"error": {"message": "unknown model"}})
-            return
         output, token_parts = self.generate(text, body)
         completion_tokens = len(token_parts)
         usage = {
@@ -108,7 +105,7 @@ class Handler(BaseHTTPRequestHandler):
             )
 
     def generate(self, prompt: str, body: dict[str, Any]) -> tuple[str, list[str]]:
-        if "Benchmark request:" in prompt:
+        if re.search(r"\nRequest \d+\.$", prompt):
             count = int(body.get("max_tokens", 16))
             parts = [f"token{i} " for i in range(count)]
             return "".join(parts), parts

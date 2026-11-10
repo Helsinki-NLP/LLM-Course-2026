@@ -10,18 +10,18 @@ constrained (JSON) output. The examples use the SGLang inference engine.
 
 ## Lab 3 assignment
 
-Serve your Lab 2 model with SGLang and measure it:
+Run the same model with plain Hugging Face `transformers` and with the vLLM
+inference engine, interactively in one GPU session:
 
-1. Measure time to first token, time per output token and throughput with 1,
-   8 and 32 parallel requests.
-2. Repeat the measurements with FP8 weights.
-3. Score bf16 and FP8 on your Lab 2 test set with the Lab 2 scorer.
-4. Compare JSON answers with and without a JSON schema.
+1. Run a speed benchmark (time to first token, time per output token,
+   throughput with 1 and 8 requests at a time) for both.
+2. Evaluate both on your Lab 2 test set with the Lab 2 prompt and scorer.
+3. Compare the two and explain the difference.
+4. Design and run one small experiment of your own.
 
-Follow the step-by-step instructions in [`Lab-3/README.md`](Lab-3/README.md).
-One GPU job runs the whole experiment. The README lists the minimum needed for
-the report and optional extensions.
+Follow the step-by-step commands in [`Lab-3/README.md`](Lab-3/README.md) or
+the notebook `Lab-3/lab3.ipynb`. FP8 weights and JSON output with a schema
+are optional extensions.
 
-Keep the three result tables, the raw results and a short recommendation
-(bf16 or FP8, with or without a schema) for the inference section of the
-final report.
+Keep the result tables, your experiment and a short discussion (when is an
+inference engine worth it?) for the inference section of the final report.

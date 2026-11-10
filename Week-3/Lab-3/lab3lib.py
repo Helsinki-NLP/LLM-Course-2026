@@ -152,12 +152,12 @@ def streaming_completion(
     }
 
 
-def load_server_config(path: str | Path) -> dict[str, Any]:
-    """Read a server config and add the model name that requests should use."""
+def load_model_config(path: str | Path) -> dict[str, Any]:
+    """Read a model config (configs/model.json) and add the request model name."""
     config = json.loads(Path(path).read_text(encoding="utf-8"))
     adapter = config.get("adapter")
-    # SGLang selects a LoRA adapter with "<served model>:<adapter name>".
-    config["request_model"] = f"task:{adapter['name']}" if adapter else "task"
+    # vLLM serves a LoRA adapter under its own name next to the base model.
+    config["request_model"] = adapter["name"] if adapter else "task"
     return config
 
 
@@ -232,3 +232,146 @@ class Task:
         if value["label"] not in self.labels:
             return False, "invalid_label", None
         return True, None, value["label"]
+
+
+# ---------------------------------------------------------------------------
+# Two ways to run the model with the same interface:
+#   ServerBackend: requests to an OpenAI-compatible server (vLLM)
+#   HFBackend:     plain Hugging Face transformers in this Python process
+# ---------------------------------------------------------------------------
+
+
+class ServerBackend:
+    name = "server"
+
+    def __init__(self, config: dict[str, Any], timeout: float = 300.0) -> None:
+        self.base_url = f"http://127.0.0.1:{config['port']}/v1"
+        self.model = config["request_model"]
+        self.timeout = timeout
+
+    def answer(self, messages, max_tokens: int, extra: dict | None = None) -> str:
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": 0.0,
+            "max_tokens": max_tokens,
+            "seed": 2026,
+            **(extra or {}),
+        }
+        response = chat_completion(self.base_url, payload, self.timeout)
+        return response["choices"][0]["message"]["content"] or ""
+
+    def timed(self, messages, max_tokens: int) -> dict[str, Any]:
+        """One streamed request with a fixed output length, with timings."""
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": 0.0,
+            "max_tokens": max_tokens,
+            "ignore_eos": True,
+            "seed": 2026,
+        }
+        return streaming_completion(self.base_url, payload, self.timeout)
+
+
+class HFBackend:
+    """Plain transformers: model.generate() on a (padded) batch of prompts."""
+
+    name = "hf"
+
+    def __init__(self, config: dict[str, Any]) -> None:
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        self.torch = torch
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            config["model"], revision=config["revision"], padding_side="left"
+        )
+        if self.tokenizer.pad_token_id is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        model = AutoModelForCausalLM.from_pretrained(
+            config["model"], revision=config["revision"], dtype=torch.bfloat16
+        )
+        # The lab runs on a GPU; CPU only makes the code testable elsewhere.
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        model = model.to(self.device)
+        adapter = config.get("adapter")
+        if adapter:
+            from peft import PeftModel
+
+            model = PeftModel.from_pretrained(model, adapter["path"])
+        self.model = model.eval()
+
+    def _inputs(self, batch):
+        texts = [
+            self.tokenizer.apply_chat_template(m, tokenize=False, add_generation_prompt=True)
+            for m in batch
+        ]
+        return self.tokenizer(texts, return_tensors="pt", padding=True).to(self.device)
+
+    def _generate(self, inputs, max_new_tokens: int, fixed: bool):
+        with self.torch.inference_mode():
+            return self.model.generate(
+                **inputs,
+                do_sample=False,
+                max_new_tokens=max_new_tokens,
+                min_new_tokens=max_new_tokens if fixed else None,
+                pad_token_id=self.tokenizer.pad_token_id,
+            )
+
+    def answer_batch(self, batch, max_tokens: int) -> list[str]:
+        inputs = self._inputs(batch)
+        output = self._generate(inputs, max_tokens, fixed=False)
+        new = output[:, inputs["input_ids"].shape[1]:]
+        return [self.tokenizer.decode(row, skip_special_tokens=True) for row in new]
+
+    def timed_batch(self, batch, max_tokens: int) -> dict[str, float]:
+        """Time one batch: first the prompt and first token, then the full answer."""
+        inputs = self._inputs(batch)
+        sync = self.torch.cuda.synchronize if self.device == "cuda" else (lambda: None)
+        sync()
+        start = time.perf_counter()
+        self._generate(inputs, 1, fixed=True)
+        sync()
+        first = time.perf_counter() - start
+        start = time.perf_counter()
+        self._generate(inputs, max_tokens, fixed=True)
+        sync()
+        total = time.perf_counter() - start
+        return {"ttft_ms": first * 1000, "latency_ms": total * 1000}
+
+
+class MockHFBackend:
+    """Stand-in for HFBackend in the smoke test: no torch, no GPU."""
+
+    name = "hf"
+
+    def __init__(self, config: dict[str, Any], task: "Task | None" = None) -> None:
+        self.task = task
+
+    def answer_batch(self, batch, max_tokens: int) -> list[str]:
+        answers = []
+        for messages in batch:
+            text = "\n".join(m["content"] for m in messages)
+            label = next(
+                (
+                    row["label"]
+                    for row in self.task.test_examples()
+                    if self.task.prompting.task_example(row, include_answer=False) in text
+                ),
+                self.task.labels[0],
+            )
+            answers.append(f"Label: {label}")
+        return answers
+
+    def timed_batch(self, batch, max_tokens: int) -> dict[str, float]:
+        time.sleep(0.002 + 0.0005 * len(batch))
+        return {"ttft_ms": 2.0 + 0.5 * len(batch), "latency_ms": 2.0 + 0.5 * len(batch) + 1.0 * max_tokens}
+
+
+def make_backend(kind: str, config: dict[str, Any], task: "Task | None" = None):
+    if kind == "server":
+        return ServerBackend(config)
+    if config.get("model") == "mock":
+        return MockHFBackend(config, task)
+    return HFBackend(config)

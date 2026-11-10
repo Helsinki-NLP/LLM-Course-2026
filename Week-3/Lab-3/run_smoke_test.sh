@@ -1,59 +1,45 @@
 #!/bin/bash
-# Run the whole Lab 3 pipeline against a fake local server: no GPU, no downloads.
+# Test every Lab 3 script with fake models: no GPU, no downloads.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
-RESULTS="results/smoke"
-SERVER_PID=""
+OUT="results/smoke"
+rm -rf "$OUT"
+mkdir -p "$OUT"
+FAST="--requests 8 --warmup 1 --max-tokens 6"
 
-stop_mock() {
-  if [[ -n "$SERVER_PID" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
-    kill "$SERVER_PID"
-    wait "$SERVER_PID" 2>/dev/null || true
-  fi
-  SERVER_PID=""
-}
-trap stop_mock EXIT
-rm -rf "$RESULTS"
-mkdir -p "$RESULTS"
+# "Hugging Face" with a fake model
+python3 benchmark.py --backend hf --config configs/mock.json --output-dir "$OUT/hf" $FAST
+python3 score_task.py --backend hf --config configs/mock.json --output-dir "$OUT/hf"
 
-for LABEL in bf16 fp8; do
-  python3 mock_openai_server.py --precision "$LABEL" --port 8765 >"$RESULTS/mock-$LABEL.log" 2>&1 &
-  SERVER_PID=$!
-  for _ in $(seq 50); do
-    python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=1)" 2>/dev/null && break
-    sleep 0.1
-  done
-  CONFIG="configs/mock-$LABEL.json"
-  python3 benchmark.py --server-config "$CONFIG" --output-dir "$RESULTS/$LABEL" \
-    --requests-per-level 32 --warmup-requests 2 --max-tokens 6
-  python3 score_task.py --server-config "$CONFIG" --output-dir "$RESULTS/$LABEL"
-  if [[ "$LABEL" == "bf16" ]]; then
-    python3 evaluate_structured.py --server-config "$CONFIG" --output-dir "$RESULTS/$LABEL"
-  fi
-  stop_mock
+# "vLLM" with a fake server
+python3 mock_openai_server.py --port 8765 >"$OUT/mock-server.log" 2>&1 &
+SERVER_PID=$!
+trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+for _ in $(seq 50); do
+  python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=1)" 2>/dev/null && break
+  sleep 0.1
 done
+python3 benchmark.py --backend server --config configs/mock.json --output-dir "$OUT/vllm" $FAST
+python3 score_task.py --backend server --config configs/mock.json --output-dir "$OUT/vllm"
+python3 evaluate_structured.py --config configs/mock.json --output-dir "$OUT/vllm"
 
-python3 summarize_results.py "$RESULTS"
-python3 show_differences.py "$RESULTS" > /dev/null
+python3 summarize_results.py "$OUT"
+python3 show_differences.py "$OUT/hf" "$OUT/vllm" >/dev/null
 
 python3 - <<'PY'
-import csv
 import json
 from pathlib import Path
 
 root = Path("results/smoke")
-for label in ("bf16", "fp8"):
-    benchmark = json.loads((root / label / "benchmark-summary.json").read_text())
-    assert [row["concurrency"] for row in benchmark["levels"]] == [1, 8, 32]
-    assert all(row["requests_failed"] == 0 for row in benchmark["levels"])
-bf16 = json.loads((root / "bf16" / "task-summary.json").read_text())
-fp8 = json.loads((root / "fp8" / "task-summary.json").read_text())
-modes = {m["mode"]: m for m in json.loads((root / "bf16" / "structured-summary.json").read_text())["modes"]}
-assert bf16["score"] == 1.0 and fp8["score"] < 1.0
+for run in ("hf", "vllm"):
+    speed = json.loads((root / run / "speed-summary.json").read_text())
+    assert [level["concurrency"] for level in speed["levels"]] == [1, 8]
+    assert all(level["failed"] == 0 for level in speed["levels"])
+    assert json.loads((root / run / "eval-summary.json").read_text())["accuracy"] == 1.0
+modes = {m["mode"]: m for m in json.loads((root / "vllm" / "structured-summary.json").read_text())["modes"]}
 assert modes["free"]["invalid_rate"] > 0 and modes["schema"]["invalid_rate"] == 0
-assert len(list(csv.DictReader((root / "speed-quality.csv").open()))) == 6
 print("Smoke checks passed.")
 PY
 echo "Local smoke test completed."

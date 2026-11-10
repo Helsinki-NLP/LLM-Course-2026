@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Ask for a JSON answer twice: once with the prompt only, once with a JSON schema.
+"""Optional extension: ask for a JSON answer with and without a JSON schema.
 
-The schema request uses the standard OpenAI field
-response_format={"type": "json_schema", ...}, which SGLang supports.
+Runs against the vLLM server. The schema is sent with the standard OpenAI
+field response_format={"type": "json_schema", ...}.
+
+Usage:
+    python3 evaluate_structured.py --task-config ../../Week-2/Lab-2/configs/my-task.json --output-dir results/json
 """
 
 from __future__ import annotations
@@ -14,7 +17,7 @@ from lab3lib import (
     DEFAULT_TASK_CONFIG,
     Task,
     chat_completion,
-    load_server_config,
+    load_model_config,
     utc_now,
     write_json,
     write_jsonl,
@@ -23,7 +26,8 @@ from lab3lib import (
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--server-config", type=Path, required=True)
+    parser.add_argument("--config", type=Path, default=Path("configs/model.json"))
+    parser.add_argument("--limit", type=int, default=100)
     parser.add_argument("--task-config", type=Path, default=DEFAULT_TASK_CONFIG)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--max-tokens", type=int, default=64)
@@ -34,10 +38,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    server = load_server_config(args.server_config)
+    server = load_model_config(args.config)
     base_url = f"http://127.0.0.1:{server['port']}/v1"
     task = Task(args.task_config)
     examples = task.test_examples()
+    if args.limit:
+        examples = examples[: args.limit]
     rows = []
     modes = []
     for mode in ("free", "schema"):
@@ -60,7 +66,6 @@ def main() -> None:
             valid, reason, label = task.check_json(text)
             row = {
                 "id": example["id"],
-                "configuration": server["label"],
                 "mode": mode,
                 "gold": example["label"],
                 "prediction": label,
@@ -84,7 +89,6 @@ def main() -> None:
             }
         )
     summary = {
-        "configuration": server["label"],
         "invalid_definition": 'not JSON, not exactly {"label": ...}, or a label outside the task labels',
         "scoring": "an invalid answer counts as wrong",
         "schema": task.schema(),

@@ -1,13 +1,12 @@
 {
-  "label": "bf16",
   "model": "Qwen/Qwen3.5-0.8B",
   "revision": "main",
   "quantization": null,
   "adapter": null,
-  "context_length": 4096,
-  "mem_fraction_static": 0.8,
-  "port": 30000,
+  "max_model_len": 4096,
+  "gpu_memory_utilization": 0.8,
+  "port": 8000,
   "extra_args": [
-    "--disable-radix-cache"
+    "--no-enable-prefix-caching"
   ]
 }

@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Print the Lab 3 results as Markdown tables and write speed-quality.csv.
+"""Print all Lab 3 results as Markdown tables.
 
 Usage:
-    python3 summarize_results.py results/<run>
+    python3 summarize_results.py results
+
+Every folder inside results/ (for example hf/ and vllm/) becomes rows of the
+tables. Paste the output into your report.
 """
 
 from __future__ import annotations
@@ -11,91 +14,66 @@ import argparse
 import csv
 import json
 from pathlib import Path
-from typing import Any
 
 
-def read(path: Path) -> dict[str, Any] | None:
+def read(path: Path):
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
 
 
-def num(value: Any, digits: int = 1) -> str:
+def num(value, digits: int = 1) -> str:
     return "–" if value is None else f"{value:.{digits}f}"
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("results_dir", type=Path)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("results_dir", type=Path, nargs="?", default=Path("results"))
     args = parser.parse_args()
-    root = args.results_dir
+    runs = sorted(p for p in args.results_dir.iterdir() if p.is_dir())
 
-    labels = [name for name in ("bf16", "fp8") if (root / name / "benchmark-summary.json").exists()]
-    if not labels:
-        raise SystemExit(f"No results found in {root}")
-
-    first = read(root / labels[0] / "benchmark-summary.json")
-    print(f"## Lab 3 results: {root}\n")
-    print(
-        f"Model: {first.get('model_id', first['model'])} (revision {first['model_revision']}). "
-        f"{first['requests_per_level']} requests per level, {first['max_tokens']} output tokens each, "
-        f"{first['warmup_requests_discarded']} warm-up requests discarded.\n"
-    )
-
+    speed_rows = []
     print("### Speed\n")
-    print("| Precision | Concurrency | Time to first token (ms, median) | Time per output token (ms, median) | Output tokens/s (all requests) | Failed |")
-    print("|---|---:|---:|---:|---:|---:|")
-    csv_rows = []
-    for label in labels:
-        benchmark = read(root / label / "benchmark-summary.json")
-        task = read(root / label / "task-summary.json") or {}
-        for level in benchmark["levels"]:
+    print("| Run | Model | Concurrency | First token (ms) | Per token (ms) | Tokens/s (all) |")
+    print("|---|---|---:|---:|---:|---:|")
+    for run in runs:
+        summary = read(run / "speed-summary.json")
+        if not summary:
+            continue
+        model = summary["model"] + (" (FP8)" if summary.get("quantization") == "fp8" else "")
+        for level in summary["levels"]:
             print(
-                f"| {label} | {level['concurrency']} | {num(level['ttft_ms_p50'])} | "
-                f"{num(level['tpot_ms_p50'], 2)} | {num(level['output_tokens_per_second'], 0)} | "
-                f"{level['requests_failed']} |"
+                f"| {run.name} | {model} | {level['concurrency']} | {num(level['ttft_ms_p50'], 0)} | "
+                f"{num(level['tpot_ms_p50'], 2)} | {num(level['tokens_per_second'], 0)} |"
             )
-            csv_rows.append(
-                {
-                    "precision": label,
-                    "concurrency": level["concurrency"],
-                    "ttft_ms_p50": level["ttft_ms_p50"],
-                    "ttft_ms_p95": level["ttft_ms_p95"],
-                    "tpot_ms_p50": level["tpot_ms_p50"],
-                    "tpot_ms_p95": level["tpot_ms_p95"],
-                    "output_tokens_per_second": level["output_tokens_per_second"],
-                    "requests_failed": level["requests_failed"],
-                    "task_accuracy": task.get("score"),
-                }
+            speed_rows.append({"run": run.name, "model": model, **level})
+    print("\nMedians over the requests; every request produced the same number of tokens.")
+
+    print("\n### Evaluation\n")
+    print("| Run | Accuracy (%) | Examples | No label | Time (s) |")
+    print("|---|---:|---:|---:|---:|")
+    for run in runs:
+        summary = read(run / "eval-summary.json")
+        if summary:
+            print(
+                f"| {run.name} | {num(100 * summary['accuracy'])} | {summary['examples']} | "
+                f"{summary['no_label']} | {num(summary['seconds'])} |"
             )
 
-    print("\n### Quality on the test set\n")
-    print("| Precision | Accuracy (%) | Examples | No label found |")
-    print("|---|---:|---:|---:|")
-    for label in labels:
-        task = read(root / label / "task-summary.json")
-        if task:
-            print(
-                f"| {label} | {num(100 * task['score'])} | {task['example_count']} | {task['no_label']} |"
-            )
+    for run in runs:
+        structured = read(run / "structured-summary.json")
+        if structured:
+            print(f"\n### JSON output ({run.name})\n")
+            print("| Request | Invalid (%) | Accuracy (%) |")
+            print("|---|---:|---:|")
+            for mode in structured["modes"]:
+                name = {"free": "prompt only", "schema": "with JSON schema"}[mode["mode"]]
+                print(f"| {name} | {num(100 * mode['invalid_rate'])} | {num(100 * mode['task_score'])} |")
 
-    structured = read(root / "bf16" / "structured-summary.json")
-    if structured:
-        print("\n### JSON output (bf16)\n")
-        print("| Request | Invalid outputs (%) | Accuracy (%) |")
-        print("|---|---:|---:|")
-        names = {"free": "prompt only", "schema": "with JSON schema"}
-        for mode in structured["modes"]:
-            print(
-                f"| {names[mode['mode']]} | {num(100 * mode['invalid_rate'])} | "
-                f"{num(100 * mode['task_score'])} |"
-            )
-
-    with (root / "speed-quality.csv").open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(csv_rows[0]))
-        writer.writeheader()
-        writer.writerows(csv_rows)
-    print(f"\nWrote {root / 'speed-quality.csv'}")
-    if "mock" in str(first.get("model_id")):
-        print("Note: mock server. These numbers test the pipeline and are not real measurements.")
+    if speed_rows:
+        with (args.results_dir / "speed.csv").open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=list(speed_rows[0]))
+            writer.writeheader()
+            writer.writerows(speed_rows)
+        print(f"\nSpeed numbers also saved to {args.results_dir / 'speed.csv'}")
 
 
 if __name__ == "__main__":

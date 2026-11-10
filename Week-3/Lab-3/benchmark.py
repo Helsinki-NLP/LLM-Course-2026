@@ -1,22 +1,32 @@
 #!/usr/bin/env python3
-"""Benchmark streaming TTFT, TPOT, and aggregate output throughput."""
+"""Speed benchmark: time to first token, time per output token and throughput.
+
+Usage:
+    python3 benchmark.py --backend hf     --output-dir results/hf
+    python3 benchmark.py --backend server --output-dir results/vllm
+    python3 benchmark.py --backend server --output-dir results/vllm-c --concurrency 1 2 4 8 16 32
+
+--concurrency is the number of requests handled at the same time. For the
+server they are sent in parallel; for Hugging Face they form one padded batch
+for model.generate(). Every request produces exactly --max-tokens tokens, so
+all requests do the same amount of work.
+"""
 
 from __future__ import annotations
 
 import argparse
-import csv
-import json
+import math
 import random
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Event
 from typing import Any
 
 from lab3lib import (
-    load_server_config,
+    load_model_config,
+    make_backend,
     percentile,
-    streaming_completion,
     utc_now,
     write_json,
     write_jsonl,
@@ -24,187 +34,125 @@ from lab3lib import (
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--server-config", type=Path, required=True)
-    parser.add_argument("--prompts", type=Path, default=Path("configs/benchmark-prompts.txt"))
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--backend", choices=["hf", "server"], required=True)
+    parser.add_argument("--config", type=Path, default=Path("configs/model.json"))
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--concurrency", type=int, nargs="+", default=[1, 8, 32])
-    parser.add_argument("--requests-per-level", type=int, default=64)
-    parser.add_argument("--warmup-requests", type=int, default=20)
+    parser.add_argument("--prompts", type=Path, default=Path("configs/benchmark-prompts.txt"))
+    parser.add_argument("--concurrency", type=int, nargs="+", default=[1, 8])
+    parser.add_argument("--requests", type=int, default=16, help="requests per concurrency level")
+    parser.add_argument("--warmup", type=int, default=3, help="requests run first and not counted")
     parser.add_argument("--max-tokens", type=int, default=128)
-    parser.add_argument("--seed", type=int, default=2026)
-    parser.add_argument("--timeout", type=float, default=300.0)
-    args = parser.parse_args()
-    server = load_server_config(args.server_config)
-    args.base_url = f"http://127.0.0.1:{server['port']}/v1"
-    args.model = server["request_model"]
-    args.model_id = server["model"]
-    args.config_label = server["label"]
-    args.model_revision = server["revision"]
-    args.adapter = server.get("adapter")
-    return args
+    return parser.parse_args()
 
 
-def make_payload(args: argparse.Namespace, prompt: str, request_id: str) -> dict[str, Any]:
-    return {
-        "model": args.model,
-        "messages": [
-            {
-                "role": "user",
-                "content": f"{prompt}\nBenchmark request: {request_id}",
-            }
-        ],
-        "temperature": 0.0,
-        "max_tokens": args.max_tokens,
-        "ignore_eos": True,
-        "seed": args.seed,
-    }
+def load_prompts(path: Path) -> list[str]:
+    prompts = [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    random.Random(2026).shuffle(prompts)
+    return prompts
 
 
-def run_one(
-    args: argparse.Namespace,
-    prompt: str,
-    request_id: str,
-    concurrency: int,
-    gate: Event | None = None,
-) -> dict[str, Any]:
-    if gate is not None:
+def as_messages(prompt: str, index: int) -> list[dict[str, str]]:
+    # The request number makes every prompt unique, so nothing is reused.
+    return [{"role": "user", "content": f"{prompt}\nRequest {index}."}]
+
+
+def run_server_level(backend, prompts, concurrency, count, max_tokens):
+    gate = Event()
+
+    def one(index: int) -> dict[str, Any]:
         gate.wait()
-    try:
-        measured = streaming_completion(
-            args.base_url,
-            make_payload(args, prompt, request_id),
-            timeout=args.timeout,
-        )
-        measured.pop("content")
-        return {
-            "request_id": request_id,
-            "configuration": args.config_label,
-            "concurrency": concurrency,
-            "seed": args.seed,
-            "model": args.model,
-            "model_revision": args.model_revision,
-            "adapter": args.adapter,
-            "status": "ok",
-            **measured,
-        }
-    except Exception as exc:  # Preserve failures in the raw observations.
-        return {
-            "request_id": request_id,
-            "configuration": args.config_label,
-            "concurrency": concurrency,
-            "seed": args.seed,
-            "model": args.model,
-            "model_revision": args.model_revision,
-            "adapter": args.adapter,
-            "started_at": utc_now(),
-            "status": "error",
-            "error": f"{type(exc).__name__}: {exc}",
-        }
+        try:
+            timing = backend.timed(as_messages(prompts[index % len(prompts)], index), max_tokens)
+            timing.pop("content", None)
+            return {"status": "ok", **timing}
+        except Exception as error:  # keep failures in the raw results
+            return {"status": "error", "error": f"{type(error).__name__}: {error}"}
+
+    started = time.perf_counter()
+    with ThreadPoolExecutor(max_workers=concurrency) as pool:
+        futures = [pool.submit(one, index) for index in range(count)]
+        gate.set()
+        rows = [future.result() for future in futures]
+    return rows, time.perf_counter() - started
 
 
-def summarize(
-    rows: list[dict[str, Any]], concurrency: int, elapsed: float, requested: int
-) -> dict[str, Any]:
-    good = [row for row in rows if row["status"] == "ok"]
-    ttft = [float(row["ttft_ms"]) for row in good]
-    tpot = [float(row["tpot_ms"]) for row in good]
-    output_tokens = sum(int(row["output_tokens"]) for row in good)
-    return {
-        "concurrency": concurrency,
-        "requests_requested": requested,
-        "requests_completed": len(good),
-        "requests_failed": requested - len(good),
-        "ttft_ms_p50": percentile(ttft, 0.50),
-        "ttft_ms_p95": percentile(ttft, 0.95),
-        "tpot_ms_p50": percentile(tpot, 0.50),
-        "tpot_ms_p95": percentile(tpot, 0.95),
-        "output_tokens": output_tokens,
-        "batch_elapsed_s": elapsed,
-        "output_tokens_per_second": output_tokens / elapsed if elapsed else None,
-    }
+def run_hf_level(backend, prompts, concurrency, count, max_tokens):
+    rows = []
+    started = time.perf_counter()
+    for first in range(0, count, concurrency):
+        indices = range(first, min(first + concurrency, count))
+        batch = [as_messages(prompts[i % len(prompts)], i) for i in indices]
+        timing = backend.timed_batch(batch, max_tokens)
+        tpot = (timing["latency_ms"] - timing["ttft_ms"]) / max(max_tokens - 1, 1)
+        for _ in indices:
+            rows.append(
+                {
+                    "status": "ok",
+                    "ttft_ms": timing["ttft_ms"],
+                    "tpot_ms": tpot,
+                    "latency_ms": timing["latency_ms"],
+                    "output_tokens": max_tokens,
+                }
+            )
+    return rows, time.perf_counter() - started
 
 
 def main() -> None:
     args = parse_args()
-    if args.requests_per_level < max(args.concurrency):
-        raise SystemExit("--requests-per-level must be at least the largest concurrency")
-    prompts = [
-        line.strip()
-        for line in args.prompts.read_text(encoding="utf-8").splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    ]
-    if not prompts:
-        raise SystemExit(f"no prompts found in {args.prompts}")
-    random.Random(args.seed).shuffle(prompts)
-    server_config = json.loads(args.server_config.read_text(encoding="utf-8"))
-    args.output_dir.mkdir(parents=True, exist_ok=True)
+    config = load_model_config(args.config)
+    backend = make_backend(args.backend, config)
+    prompts = load_prompts(args.prompts)
+    run_level = run_server_level if args.backend == "server" else run_hf_level
 
-    for index in range(args.warmup_requests):
-        row = run_one(args, prompts[index % len(prompts)], f"warmup-{index:04d}", 1)
-        if row["status"] != "ok":
-            raise SystemExit(f"warmup failed: {row['error']}")
+    print(f"Warm-up: {args.warmup} requests (not counted)")
+    run_level(backend, prompts, 1, args.warmup, args.max_tokens)
 
-    all_rows: list[dict[str, Any]] = []
-    summaries: list[dict[str, Any]] = []
+    all_rows, levels = [], []
     for concurrency in args.concurrency:
-        gate = Event()
-        started = time.perf_counter()
-        with ThreadPoolExecutor(max_workers=concurrency) as executor:
-            futures = []
-            for index in range(args.requests_per_level):
-                request_id = f"c{concurrency}-{index:04d}"
-                prompt = prompts[index % len(prompts)]
-                futures.append(
-                    executor.submit(run_one, args, prompt, request_id, concurrency, gate)
-                )
-            gate.set()
-            rows = [future.result() for future in as_completed(futures)]
-        elapsed = time.perf_counter() - started
-        rows.sort(key=lambda row: row["request_id"])
-        all_rows.extend(rows)
-        summaries.append(
-            summarize(rows, concurrency, elapsed, args.requests_per_level)
+        count = max(args.requests, concurrency)
+        rows, elapsed = run_level(backend, prompts, concurrency, count, args.max_tokens)
+        good = [row for row in rows if row["status"] == "ok"]
+        tokens = sum(int(row["output_tokens"]) for row in good)
+        level = {
+            "concurrency": concurrency,
+            "requests": count,
+            "failed": count - len(good),
+            "ttft_ms_p50": percentile([r["ttft_ms"] for r in good], 0.5),
+            "ttft_ms_p95": percentile([r["ttft_ms"] for r in good], 0.95),
+            "tpot_ms_p50": percentile([r["tpot_ms"] for r in good], 0.5),
+            "tpot_ms_p95": percentile([r["tpot_ms"] for r in good], 0.95),
+            "tokens_per_second": tokens / elapsed if elapsed else None,
+            "seconds": elapsed,
+        }
+        levels.append(level)
+        all_rows += [{"concurrency": concurrency, **row} for row in rows]
+        print(
+            f"concurrency {concurrency:>3}: first token {level['ttft_ms_p50']:.0f} ms, "
+            f"per token {level['tpot_ms_p50']:.1f} ms, {level['tokens_per_second']:.0f} tokens/s"
+            + (f", {level['failed']} failed" if level["failed"] else "")
         )
 
-    write_jsonl(args.output_dir / "requests.jsonl", all_rows)
-    summary = {
-        "configuration": args.config_label,
-        "model": args.model,
-        "model_id": args.model_id,
-        "model_revision": args.model_revision,
-        "adapter": args.adapter,
-        "seed": args.seed,
-        "warmup_requests_discarded": args.warmup_requests,
-        "requests_per_level": args.requests_per_level,
-        "max_tokens": args.max_tokens,
-        "created_at": utc_now(),
-        "levels": summaries,
-    }
-    write_json(args.output_dir / "benchmark-summary.json", summary)
-    with (args.output_dir / "benchmark-summary.csv").open(
-        "w", newline="", encoding="utf-8"
-    ) as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(summaries[0]))
-        writer.writeheader()
-        writer.writerows(summaries)
+    write_jsonl(args.output_dir / "speed-requests.jsonl", all_rows)
     write_json(
-        args.output_dir / "benchmark-manifest.json",
+        args.output_dir / "speed-summary.json",
         {
-            "command_arguments": vars(args)
-            | {
-                "output_dir": str(args.output_dir),
-                "prompts": str(args.prompts),
-                "server_config": str(args.server_config),
-            },
-            "server_config_snapshot": server_config,
-            "raw_observations": "requests.jsonl",
-            "summary_json": "benchmark-summary.json",
-            "summary_csv": "benchmark-summary.csv",
+            "backend": "vLLM" if args.backend == "server" and config["model"] != "mock" else args.backend,
+            "model": config["model"],
+            "revision": config["revision"],
+            "quantization": config.get("quantization"),
+            "max_tokens": args.max_tokens,
+            "warmup": args.warmup,
+            "prompts": str(args.prompts),
+            "created_at": utc_now(),
+            "levels": levels,
         },
     )
-    failures = sum(row["requests_failed"] for row in summaries)
-    print(f"Wrote {len(all_rows)} raw observations; failures={failures}")
+    print(f"Saved to {args.output_dir}/speed-summary.json")
 
 
 if __name__ == "__main__":

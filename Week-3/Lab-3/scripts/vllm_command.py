@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Print the SGLang server command for one server config (bf16 or fp8).
+"""Print the vLLM server command for a model config.
 
 Usage:
-    python3 scripts/sglang_command.py configs/bf16.json
+    python3 scripts/vllm_command.py configs/model.json
 """
 
 from __future__ import annotations
@@ -14,22 +14,21 @@ import sys
 
 def command(config: dict) -> list[str]:
     args = [
-        "python", "-m", "sglang.launch_server",
-        "--model-path", config["model"],
+        "vllm", "serve", config["model"],
         "--revision", config["revision"],
         "--served-model-name", "task",
         "--host", "127.0.0.1",
         "--port", str(config["port"]),
         "--dtype", "bfloat16",
-        "--context-length", str(config["context_length"]),
-        "--mem-fraction-static", str(config["mem_fraction_static"]),
-        "--random-seed", "2026",
+        "--max-model-len", str(config["max_model_len"]),
+        "--gpu-memory-utilization", str(config["gpu_memory_utilization"]),
+        "--seed", "2026",
     ]
     if config.get("quantization"):
         args += ["--quantization", config["quantization"]]
     adapter = config.get("adapter")
     if adapter:
-        args += ["--enable-lora", "--lora-paths", f"{adapter['name']}={adapter['path']}"]
+        args += ["--enable-lora", "--lora-modules", f"{adapter['name']}={adapter['path']}"]
     args += [str(value) for value in config.get("extra_args", [])]
     return args
 

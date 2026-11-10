@@ -1,30 +1,29 @@
 #!/bin/bash
-# Start the SGLang server for one config in the background and wait until it is ready.
-# Usage: bash scripts/start_server.sh configs/bf16.json
+# Start the vLLM server in the background and wait until it is ready.
+# Usage: bash scripts/start_server.sh [configs/model.json]
+# Run it inside an interactive GPU session. Stop it with scripts/stop_server.sh.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONFIG="${1:?usage: start_server.sh configs/bf16.json}"
-SGLANG_ENV="${SGLANG_ENV:-/projappl/project_2021893/sglang-env}"
+CONFIG="${1:-$ROOT/configs/model.json}"
+LOG="$ROOT/.server/vllm.log"
 export HF_HOME="${HF_HOME:-/scratch/project_2021893/${USER}/hf}"
 mkdir -p "$HF_HOME" "$ROOT/.server"
 
-if [[ ! -x "$SGLANG_ENV/bin/python" ]]; then
-  echo "SGLang environment not found at $SGLANG_ENV." >&2
-  echo "Ask the teacher, or install it yourself with: bash scripts/install_sglang.sh" >&2
-  exit 2
-fi
-
-LABEL="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["label"])' "$CONFIG")"
 PORT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["port"])' "$CONFIG")"
-LOG="$ROOT/.server/sglang-$LABEL.log"
-COMMAND="$(python3 "$ROOT/scripts/sglang_command.py" "$CONFIG")"
-
+COMMAND="$(python3 "$ROOT/scripts/vllm_command.py" "$CONFIG")"
 bash "$ROOT/scripts/stop_server.sh" >/dev/null
-echo "Starting SGLang ($LABEL); log: $LOG"
+
+echo "Starting vLLM; log: $LOG"
 echo "$COMMAND" >"$LOG"
+if ! command -v module >/dev/null 2>&1 && [[ -f /etc/profile.d/modules.sh ]]; then
+  source /etc/profile.d/modules.sh  # non-interactive shells may lack "module"
+fi
 (
-  source "$SGLANG_ENV/bin/activate"
+  module purge
+  module load python-vllm
+  # Keep packages installed with pip --user (e.g. for Lab 2) out of vLLM's way.
+  export PYTHONNOUSERSITE=1
   exec bash -c "$COMMAND"
 ) >>"$LOG" 2>&1 &
 echo $! >"$ROOT/.server/server.pid"

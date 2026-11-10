@@ -1,8 +1,7 @@
 {
-  "label": "fp8",
   "model": "mock",
   "revision": "mock-v1",
-  "quantization": "fp8",
+  "quantization": null,
   "adapter": null,
   "port": 8765
 }
