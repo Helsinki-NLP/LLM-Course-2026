@@ -133,6 +133,17 @@ explain the gap.
 task (`--prompts`, `--max-tokens`). Does vLLM's advantage over Hugging Face
 hold for your workload?
 
+**E. Your language.** How many tokens per word does your task data need?
+Translate 10 to 20 of your examples into another language (or take them from
+a parallel dataset), count the tokens per word for both, and work out what the
+difference means for speed in words per second and for cost. The notebook
+(section 4) has the code to start from.
+
+**F. Score instead of generate.** For a classification task, score each label
+(one forward pass, prefill only) instead of generating an answer. Compare
+accuracy and time with generation. The notebook (section 4) has the code to
+start from.
+
 ## 7. Stop and keep the results
 
 ```bash
