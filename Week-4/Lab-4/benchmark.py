@@ -131,6 +131,12 @@ def main() -> None:
         }
         levels.append(level)
         all_rows += [{"concurrency": concurrency, **row} for row in rows]
+        if not good:
+            first_error = next((row.get("error") for row in rows if row.get("error")), "unknown")
+            raise SystemExit(
+                f"All {count} requests failed at concurrency {concurrency}. First error: {first_error}\n"
+                "Is the server running? Try: curl http://127.0.0.1:8000/health"
+            )
         print(
             f"concurrency {concurrency:>3}: first token {level['ttft_ms_p50']:.0f} ms, "
             f"per token {level['tpot_ms_p50']:.1f} ms, {level['tokens_per_second']:.0f} tokens/s"

@@ -34,7 +34,7 @@ for _ in $(seq 600); do
     tail -n 30 "$LOG" >&2
     exit 1
   fi
-  if curl --fail --silent "http://127.0.0.1:${PORT}/health" >/dev/null; then
+  if curl --noproxy '*' --fail --silent "http://127.0.0.1:${PORT}/health" >/dev/null; then
     echo "Ready: http://127.0.0.1:${PORT}/v1"
     exit 0
   fi

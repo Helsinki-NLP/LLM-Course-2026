@@ -67,6 +67,10 @@ def percentile(values: list[float], probability: float) -> float | None:
     return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower)
 
 
+# The server always runs on this machine, so ignore any http_proxy settings.
+_LOCAL = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
 def _request(url: str, payload: dict[str, Any], timeout: float):
     body = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
@@ -76,7 +80,7 @@ def _request(url: str, payload: dict[str, Any], timeout: float):
         method="POST",
     )
     try:
-        return urllib.request.urlopen(request, timeout=timeout)
+        return _LOCAL.open(request, timeout=timeout)
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"HTTP {exc.code} from server: {detail}") from exc

@@ -13,17 +13,30 @@ FAST="--requests 8 --warmup 1 --max-tokens 6"
 python3 benchmark.py --backend hf --config configs/mock.json --output-dir "$OUT/hf" $FAST
 python3 score_task.py --backend hf --config configs/mock.json --output-dir "$OUT/hf"
 
-# "vLLM" with a fake server
-python3 mock_openai_server.py --port 8765 >"$OUT/mock-server.log" 2>&1 &
+# "vLLM" with a fake server, on a free port so that several people can run
+# the smoke test on the same login node at once
+PORT="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
+MOCK="$OUT/mock.json"
+python3 -c 'import json, sys; c = json.load(open("configs/mock.json")); c["port"] = int(sys.argv[1]); json.dump(c, open(sys.argv[2], "w"))' "$PORT" "$MOCK"
+python3 mock_openai_server.py --port "$PORT" >"$OUT/mock-server.log" 2>&1 &
 SERVER_PID=$!
 trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
-for _ in $(seq 50); do
-  python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=1)" 2>/dev/null && break
+READY=0
+for _ in $(seq 100); do
+  if python3 -c "import sys, urllib.request as u; u.build_opener(u.ProxyHandler({})).open('http://127.0.0.1:$PORT/health', timeout=1)" 2>/dev/null; then
+    READY=1
+    break
+  fi
   sleep 0.1
 done
-python3 benchmark.py --backend server --config configs/mock.json --output-dir "$OUT/vllm" $FAST
-python3 score_task.py --backend server --config configs/mock.json --output-dir "$OUT/vllm"
-python3 evaluate_structured.py --config configs/mock.json --output-dir "$OUT/vllm"
+if [[ "$READY" != 1 ]]; then
+  echo "The fake server did not start. Its log:" >&2
+  cat "$OUT/mock-server.log" >&2
+  exit 1
+fi
+python3 benchmark.py --backend server --config "$MOCK" --output-dir "$OUT/vllm" $FAST
+python3 score_task.py --backend server --config "$MOCK" --output-dir "$OUT/vllm"
+python3 evaluate_structured.py --config "$MOCK" --output-dir "$OUT/vllm"
 
 python3 summarize_results.py "$OUT"
 python3 show_differences.py "$OUT/hf" "$OUT/vllm" >/dev/null
