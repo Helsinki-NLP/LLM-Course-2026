@@ -78,8 +78,16 @@ sbatch slurm/lab4.slurm ../../Week-2/Lab-2/configs/my-task.json
 
 ✓ `sbatch` prints `Submitted batch job JOBID`. Follow the job with
 `tail -f logs/lab4-JOBID.out` (Ctrl+C stops watching, not the job). It runs
-steps 3, 4 and 5 and writes the results to `results/job-JOBID/`; the tables
-of step 5 are at the end of the log.
+steps 3, 4 and 5 and writes the results to `results/batch/`; the tables of
+step 5 are at the end of the log.
+
+You can also run Hugging Face and vLLM as two shorter jobs, in either order;
+the second one prints the full comparison:
+
+```bash
+sbatch slurm/lab4.slurm ../../Week-2/Lab-2/configs/my-task.json hf
+sbatch slurm/lab4.slurm ../../Week-2/Lab-2/configs/my-task.json vllm
+```
 
 For your own experiment (step 6), open `slurm/lab4.slurm`, remove the `#` in
 front of the command for your option, and submit again. The job may run at

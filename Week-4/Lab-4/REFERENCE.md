@@ -118,8 +118,9 @@ mkdir -p logs
 sbatch slurm/lab4.slurm ../../Week-2/Lab-2/configs/my-task.json
 ```
 
-The log is `logs/lab4-JOBID.out` and the results go to
-`results/job-JOBID/`. `scripts/run_experiment.sh RESULTS_DIR [LAB2_CONFIG]`
+Add `hf` or `vllm` after the task config to run only one backend. The log is
+`logs/lab4-JOBID.out` and the results go to `results/batch/`; a new run
+replaces the old one. `scripts/run_experiment.sh RESULTS_DIR [LAB2_CONFIG]`
 runs steps 3 and 4 in the same way inside an interactive session.
 
 ## Changing the model
