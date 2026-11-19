@@ -110,14 +110,17 @@ model architecture; if it fails, report that and use the plain model.
 
 ## Running everything as a batch job
 
-The core steps (3 and 4) also run unattended:
+`slurm/lab4.slurm` runs README steps 3, 4 and 5 unattended, with commented
+lines for each step 6 option (see README step 2):
 
 ```bash
 mkdir -p logs
 sbatch slurm/lab4.slurm ../../Week-2/Lab-2/configs/my-task.json
 ```
 
-The results go to `results/job-JOBID/`.
+The log is `logs/lab4-JOBID.out` and the results go to
+`results/job-JOBID/`. `scripts/run_experiment.sh RESULTS_DIR [LAB2_CONFIG]`
+runs steps 3 and 4 in the same way inside an interactive session.
 
 ## Changing the model
 

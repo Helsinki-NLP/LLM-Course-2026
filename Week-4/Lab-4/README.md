@@ -25,8 +25,11 @@ server is called and how speed and accuracy are measured. Details are in
 benchmarked and evaluated, one experiment of your own (step 6), and a short
 discussion.
 
-**Optional:** FP8 weights, JSON output with a schema, serving your Lab 2
-adapter, or running everything as a batch job (see the end).
+**Optional:** FP8 weights, JSON output with a schema, or serving your Lab 2
+adapter (see the end).
+
+**No interactive GPU session?** Run steps 3–6 as a batch job instead: see
+[No interactive session: a batch job](#no-interactive-session-a-batch-job).
 
 ## 1. Get the files and test them (login node)
 
@@ -61,6 +64,27 @@ TASK=../../Week-2/Lab-2/configs/my-task.json
 `TASK=../../Week-2/Lab-2/configs/roihu.json` (the small example). If the
 session ends, start a new one, `cd` to the lab folder, set `TASK` again, and
 repeat the two `module` lines of step 3 before any Hugging Face command.
+
+### No interactive session: a batch job
+
+If `srun` keeps waiting or is refused, submit the same steps as a batch job
+from the lab folder on `roihu-gpu.csc.fi` (not inside an `srun` session):
+
+```bash
+cd ~/LLM-Course-2026/Week-4/Lab-4
+mkdir -p logs
+sbatch slurm/lab4.slurm ../../Week-2/Lab-2/configs/my-task.json
+```
+
+✓ `sbatch` prints `Submitted batch job JOBID`. Follow the job with
+`tail -f logs/lab4-JOBID.out` (Ctrl+C stops watching, not the job). It runs
+steps 3, 4 and 5 and writes the results to `results/job-JOBID/`; the tables
+of step 5 are at the end of the log.
+
+For your own experiment (step 6), open `slurm/lab4.slurm`, remove the `#` in
+front of the command for your option, and submit again. The job may run at
+most 15 minutes on `gputest`; for longer experiments change the partition to
+`gpumedium` and raise `--time`.
 
 ## 3. Hugging Face: speed and accuracy
 
@@ -188,14 +212,14 @@ The script prints the invalid-output rate and the accuracy for each:
 python3 evaluate_structured.py --task-config $TASK --output-dir results/vllm-json
 ```
 
-**Your Lab 2 adapter** and **a batch job instead of an interactive session**:
-see [REFERENCE.md](REFERENCE.md).
+**Your Lab 2 adapter**: see [REFERENCE.md](REFERENCE.md).
 
 ## If something goes wrong
 
 | Problem | Fix |
 |---|---|
-| `srun` waits a long time | the GPUs are busy; wait, or try again later |
+| `srun` waits a long time | the GPUs are busy; wait, or use the batch job (end of step 2) |
+| batch job: `ERROR: not a GH200 node` | submit from `ssh roihu-gpu.csc.fi`, not from the browser's CPU side |
 | the first Hugging Face or vLLM command is slow | it downloads the model (about 2 GB) once; later runs reuse it |
 | `ModuleNotFoundError` in step 3 | run the Lab 2 install in step 1 |
 | `The server stopped during start-up` | read the lines it prints; the full log is `.server/vllm.log` |
