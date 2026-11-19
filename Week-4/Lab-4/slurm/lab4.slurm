@@ -15,13 +15,13 @@
 #
 #   cd ~/LLM-Course-2026/Week-4/Lab-4
 #   mkdir -p logs
-#   sbatch slurm/lab4.slurm ../../Week-2/Lab-2/configs/my-task.json          # everything
-#   sbatch slurm/lab4.slurm          # the same: uses my-task.json if you have one
+#   sbatch slurm/lab4.slurm                     # everything, with the example task
+#   sbatch slurm/lab4.slurm hf                  # only Hugging Face
+#   sbatch slurm/lab4.slurm vllm                # only vLLM (either order)
 #
-# or as two shorter jobs, one per backend (they can run in either order):
+# With your own Lab 2 task, put its config first:
 #
-#   sbatch slurm/lab4.slurm ../../Week-2/Lab-2/configs/my-task.json hf
-#   sbatch slurm/lab4.slurm ../../Week-2/Lab-2/configs/my-task.json vllm
+#   sbatch slurm/lab4.slurm ../../Week-2/Lab-2/configs/my-task.json [hf|vllm]
 #
 # Follow a job with:  tail -f logs/lab4-JOBID.out
 # Results go to results/batch/ (a new run replaces the old one). The
@@ -41,16 +41,13 @@ if [[ ! -f lab4lib.py ]]; then
   echo "  cd ~/LLM-Course-2026/Week-4/Lab-4 && sbatch slurm/lab4.slurm" >&2
   exit 1
 fi
-# Arguments: [TASK_CONFIG] [all|hf|vllm]. Without a task config, use your own
-# task if you made one in Lab 2 (my-task.json), else the bundled example.
+# Arguments: [TASK_CONFIG] [all|hf|vllm]. Without a task config, the
+# ready-made example task is used.
 if [[ "${1:-}" == all || "${1:-}" == hf || "${1:-}" == vllm ]]; then set -- "" "$1"; fi
-LAB2="../../Week-2/Lab-2/configs"
-if [[ -n "${1:-}" ]]; then TASK="$1"
-elif [[ -f "$LAB2/my-task.json" ]]; then TASK="$LAB2/my-task.json"
-else TASK="$LAB2/roihu.json"; fi
+TASK="${1:-example/configs/example.json}"
 if [[ ! -f "$TASK" ]]; then
-  echo "ERROR: the task config $TASK does not exist. The configs you have:" >&2
-  ls "$LAB2" >&2
+  echo "ERROR: the task config $TASK does not exist. Your Lab 2 configs:" >&2
+  ls ../../Week-2/Lab-2/configs >&2
   exit 1
 fi
 PART="${2:-all}"                                       # all, hf or vllm

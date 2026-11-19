@@ -7,7 +7,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 OUT="${1:?usage: run_experiment.sh RESULTS_DIR [LAB2_CONFIG]}"
-TASK="${2:-../../Week-2/Lab-2/configs/roihu.json}"
+TASK="${2:-example/configs/example.json}"
 trap 'bash scripts/stop_server.sh >/dev/null 2>&1 || true' EXIT
 if ! command -v module >/dev/null 2>&1 && [[ -f /etc/profile.d/modules.sh ]]; then
   source /etc/profile.d/modules.sh

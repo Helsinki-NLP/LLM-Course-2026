@@ -9,7 +9,8 @@ You run the same model in two ways and compare them:
 
 For each, you run a **speed benchmark** (how fast answers start, how fast they
 continue, how many tokens per second in total) and an **evaluation** (accuracy
-on your Lab 2 test set, with the Lab 2 prompt and scorer). Then you design one
+on a test set: a ready-made example task, or your own Lab 2 task). Then you
+design one
 small experiment of your own.
 
 Everything runs **interactively** in one GPU session; each command takes
@@ -40,10 +41,9 @@ cd ~/LLM-Course-2026/Week-4/Lab-4
 bash run_smoke_test.sh
 ```
 
-✓ The last line is `Local smoke test completed.` (fake models, no GPU). It
-tests with your own task if `Week-2/Lab-2/configs/my-task.json` exists, and
-with the bundled example otherwise; to choose another task, add its config:
-`bash run_smoke_test.sh ../../Week-2/Lab-2/configs/OTHER.json`.
+✓ The last line is `Local smoke test completed.` (fake models, no GPU). To
+test your own Lab 2 task too, add its config:
+`bash run_smoke_test.sh ../../Week-2/Lab-2/configs/my-task.json`.
 
 The Hugging Face part uses the packages from Lab 2, and model downloads go
 to the project's scratch disk. If you have not done Lab 2 step 3, do it now:
@@ -60,13 +60,15 @@ echo 'export HF_HOME=/scratch/project_2021893/$USER/hf' >> ~/.bashrc && source ~
 ```bash
 srun --account=project_2021893 --partition=gpuinteractive --gres=gpu:gh200:1 --time=01:00:00 --pty bash
 cd ~/LLM-Course-2026/Week-4/Lab-4
-TASK=../../Week-2/Lab-2/configs/my-task.json
+TASK=example/configs/example.json
 ```
 
-`TASK` is the config of your Lab 2 task. Without your own task, use
-`TASK=../../Week-2/Lab-2/configs/roihu.json` (the small example). If the
-session ends, start a new one, `cd` to the lab folder, set `TASK` again, and
-repeat the two `module` lines of step 3 before any Hugging Face command.
+`TASK` is the task you evaluate on. `example/configs/example.json` is a
+ready-made example: 200 test items of natural language inference (see
+`example/README.md`). To use your own Lab 2 task instead, set
+`TASK=../../Week-2/Lab-2/configs/my-task.json`. If the session ends, start a
+new one, `cd` to the lab folder, set `TASK` again, and repeat the two
+`module` lines of step 3 before any Hugging Face command.
 
 ### No interactive session: a batch job
 
@@ -76,11 +78,12 @@ from the lab folder on `roihu-gpu.csc.fi` (not inside an `srun` session):
 ```bash
 cd ~/LLM-Course-2026/Week-4/Lab-4
 mkdir -p logs
-sbatch slurm/lab4.slurm ../../Week-2/Lab-2/configs/my-task.json
+sbatch slurm/lab4.slurm
 ```
 
-Without a task config, the job uses `my-task.json` if you have one and the
-bundled example otherwise. Submit from the lab folder, as above.
+This uses the example task. For your own Lab 2 task, add its config:
+`sbatch slurm/lab4.slurm ../../Week-2/Lab-2/configs/my-task.json`. Submit
+from the lab folder, as above.
 
 ✓ `sbatch` prints `Submitted batch job JOBID`. Follow the job with
 `tail -f logs/lab4-JOBID.out` (Ctrl+C stops watching, not the job). It runs
@@ -91,8 +94,8 @@ You can also run Hugging Face and vLLM as two shorter jobs, in either order;
 the second one prints the full comparison:
 
 ```bash
-sbatch slurm/lab4.slurm ../../Week-2/Lab-2/configs/my-task.json hf
-sbatch slurm/lab4.slurm ../../Week-2/Lab-2/configs/my-task.json vllm
+sbatch slurm/lab4.slurm hf
+sbatch slurm/lab4.slurm vllm
 ```
 
 For your own experiment (step 6), open `slurm/lab4.slurm`, remove the `#` in
@@ -242,6 +245,6 @@ python3 evaluate_structured.py --task-config $TASK --output-dir results/vllm-jso
 | `Connection refused` | the server is not running: `bash scripts/start_server.sh` |
 | out of GPU memory when Hugging Face runs | stop the vLLM server first: `bash scripts/stop_server.sh` |
 | accuracy 0, or many answers without a label | check `TASK` and that `lab2lib/prompting.py` is the one you used in Lab 2 |
-| `The test data … has the fields …` | `TASK` and `lab2lib/prompting.py` are for different tasks: use the config of the task your `prompting.py` is for (usually `my-task.json`) |
+| `The test data … has the fields …` | `TASK` and Lab 2's `lab2lib/prompting.py` are for different tasks: use the config of the task your `prompting.py` is for (usually `my-task.json`), or the example task |
 
 Stuck for more than ten minutes? Ask.

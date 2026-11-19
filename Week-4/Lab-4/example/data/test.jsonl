@@ -1,0 +1,200 @@
+{"id": "snli-test-001", "premise": "This church choir sings to the masses as they sing joyous songs from the book at a church.", "hypothesis": "The church has cracks in the ceiling.", "label": "neutral"}
+{"id": "snli-test-002", "premise": "This church choir sings to the masses as they sing joyous songs from the book at a church.", "hypothesis": "The church is filled with song.", "label": "entailment"}
+{"id": "snli-test-003", "premise": "This church choir sings to the masses as they sing joyous songs from the book at a church.", "hypothesis": "A choir singing at a baseball game.", "label": "contradiction"}
+{"id": "snli-test-004", "premise": "A woman with a green headscarf, blue shirt and a very big grin.", "hypothesis": "The woman is young.", "label": "neutral"}
+{"id": "snli-test-005", "premise": "A woman with a green headscarf, blue shirt and a very big grin.", "hypothesis": "The woman is very happy.", "label": "entailment"}
+{"id": "snli-test-006", "premise": "A woman with a green headscarf, blue shirt and a very big grin.", "hypothesis": "The woman has been shot.", "label": "contradiction"}
+{"id": "snli-test-007", "premise": "An old man with a package poses in front of an advertisement.", "hypothesis": "A man poses in front of an ad.", "label": "entailment"}
+{"id": "snli-test-008", "premise": "An old man with a package poses in front of an advertisement.", "hypothesis": "A man poses in front of an ad for beer.", "label": "neutral"}
+{"id": "snli-test-009", "premise": "An old man with a package poses in front of an advertisement.", "hypothesis": "A man walks by an ad.", "label": "contradiction"}
+{"id": "snli-test-010", "premise": "A statue at a museum that no seems to be looking at.", "hypothesis": "The statue is offensive and people are mad that it is on display.", "label": "neutral"}
+{"id": "snli-test-011", "premise": "A statue at a museum that no seems to be looking at.", "hypothesis": "There is a statue that not many people seem to be interested in.", "label": "entailment"}
+{"id": "snli-test-012", "premise": "A statue at a museum that no seems to be looking at.", "hypothesis": "Tons of people are gathered around the statue.", "label": "contradiction"}
+{"id": "snli-test-013", "premise": "A land rover is being driven across a river.", "hypothesis": "A Land Rover is splashing water as it crosses a river.", "label": "entailment"}
+{"id": "snli-test-014", "premise": "A land rover is being driven across a river.", "hypothesis": "A vehicle is crossing a river.", "label": "entailment"}
+{"id": "snli-test-015", "premise": "A land rover is being driven across a river.", "hypothesis": "A sedan is stuck in the middle of a river.", "label": "contradiction"}
+{"id": "snli-test-016", "premise": "A man playing an electric guitar on stage.", "hypothesis": "A man playing banjo on the floor.", "label": "contradiction"}
+{"id": "snli-test-017", "premise": "A man playing an electric guitar on stage.", "hypothesis": "A man playing guitar on stage.", "label": "entailment"}
+{"id": "snli-test-018", "premise": "A man playing an electric guitar on stage.", "hypothesis": "A man is performing for cash.", "label": "neutral"}
+{"id": "snli-test-019", "premise": "A blond-haired doctor and her African american assistant looking threw new medical manuals.", "hypothesis": "A doctor is looking at a book", "label": "entailment"}
+{"id": "snli-test-020", "premise": "A blond-haired doctor and her African american assistant looking threw new medical manuals.", "hypothesis": "A man is eating pb and j", "label": "contradiction"}
+{"id": "snli-test-021", "premise": "A blond-haired doctor and her African american assistant looking threw new medical manuals.", "hypothesis": "A doctor is studying", "label": "neutral"}
+{"id": "snli-test-022", "premise": "One tan girl with a wool hat is running and leaning over an object, while another person in a wool hat is sitting on the ground.", "hypothesis": "A boy runs into a wall", "label": "contradiction"}
+{"id": "snli-test-023", "premise": "One tan girl with a wool hat is running and leaning over an object, while another person in a wool hat is sitting on the ground.", "hypothesis": "A tan girl runs leans over an object", "label": "entailment"}
+{"id": "snli-test-024", "premise": "One tan girl with a wool hat is running and leaning over an object, while another person in a wool hat is sitting on the ground.", "hypothesis": "A man watches his daughter leap", "label": "neutral"}
+{"id": "snli-test-025", "premise": "A young family enjoys feeling ocean waves lap at their feet.", "hypothesis": "A young man and woman take their child to the beach for the first time.", "label": "neutral"}
+{"id": "snli-test-026", "premise": "A young family enjoys feeling ocean waves lap at their feet.", "hypothesis": "A family is out at a restaurant.", "label": "contradiction"}
+{"id": "snli-test-027", "premise": "A young family enjoys feeling ocean waves lap at their feet.", "hypothesis": "A family is at the beach.", "label": "entailment"}
+{"id": "snli-test-028", "premise": "A couple walk hand in hand down a street.", "hypothesis": "A couple is walking together.", "label": "entailment"}
+{"id": "snli-test-029", "premise": "A couple walk hand in hand down a street.", "hypothesis": "The couple is married.", "label": "neutral"}
+{"id": "snli-test-030", "premise": "A couple walk hand in hand down a street.", "hypothesis": "A couple is sitting on a bench.", "label": "contradiction"}
+{"id": "snli-test-031", "premise": "3 young man in hoods standing in the middle of a quiet street facing the camera.", "hypothesis": "Three people sit by a busy street bareheaded.", "label": "contradiction"}
+{"id": "snli-test-032", "premise": "3 young man in hoods standing in the middle of a quiet street facing the camera.", "hypothesis": "Three hood wearing people pose for a picture.", "label": "entailment"}
+{"id": "snli-test-033", "premise": "3 young man in hoods standing in the middle of a quiet street facing the camera.", "hypothesis": "Three hood wearing people stand in a street.", "label": "entailment"}
+{"id": "snli-test-034", "premise": "A man reads the paper in a bar with green lighting.", "hypothesis": "The man is inside.", "label": "entailment"}
+{"id": "snli-test-035", "premise": "A man reads the paper in a bar with green lighting.", "hypothesis": "The man is reading the sportspage.", "label": "neutral"}
+{"id": "snli-test-036", "premise": "A man reads the paper in a bar with green lighting.", "hypothesis": "The man is climbing a mountain.", "label": "contradiction"}
+{"id": "snli-test-037", "premise": "Three firefighter come out of subway station.", "hypothesis": "Three firefighters putting out a fire inside of a subway station.", "label": "neutral"}
+{"id": "snli-test-038", "premise": "Three firefighter come out of subway station.", "hypothesis": "Three firefighters coming up from a subway station.", "label": "entailment"}
+{"id": "snli-test-039", "premise": "Three firefighter come out of subway station.", "hypothesis": "Three firefighters playing cards inside a fire station.", "label": "contradiction"}
+{"id": "snli-test-040", "premise": "A person wearing a straw hat, standing outside working a steel apparatus with a pile of coconuts on the ground.", "hypothesis": "A person is near a pile of coconuts.", "label": "entailment"}
+{"id": "snli-test-041", "premise": "A person wearing a straw hat, standing outside working a steel apparatus with a pile of coconuts on the ground.", "hypothesis": "A person is selling coconuts.", "label": "neutral"}
+{"id": "snli-test-042", "premise": "A person wearing a straw hat, standing outside working a steel apparatus with a pile of coconuts on the ground.", "hypothesis": "A person is burning a straw hat.", "label": "contradiction"}
+{"id": "snli-test-043", "premise": "Male in a blue jacket decides to lay in the grass.", "hypothesis": "The guy in yellow is rolling on the grass", "label": "contradiction"}
+{"id": "snli-test-044", "premise": "Male in a blue jacket decides to lay in the grass.", "hypothesis": "The guy wearing a blue jacket is laying on the green grass", "label": "entailment"}
+{"id": "snli-test-045", "premise": "Male in a blue jacket decides to lay in the grass.", "hypothesis": "The guy wearing a blue jacket is laying on the green grass taking a nap.", "label": "neutral"}
+{"id": "snli-test-046", "premise": "During calf roping a cowboy calls off his horse.", "hypothesis": "A first time roper falls off his horse.", "label": "neutral"}
+{"id": "snli-test-047", "premise": "During calf roping a cowboy calls off his horse.", "hypothesis": "A man ropes a calf successfully.", "label": "contradiction"}
+{"id": "snli-test-048", "premise": "A little boy in a gray and white striped sweater and tan pants is playing on a piece of playground equipment.", "hypothesis": "A boy is on a playground.", "label": "entailment"}
+{"id": "snli-test-049", "premise": "A little boy in a gray and white striped sweater and tan pants is playing on a piece of playground equipment.", "hypothesis": "The boy is playing on the swings after school.", "label": "neutral"}
+{"id": "snli-test-050", "premise": "A little boy in a gray and white striped sweater and tan pants is playing on a piece of playground equipment.", "hypothesis": "The boy is sitting on the school bus on his way home.", "label": "contradiction"}
+{"id": "snli-test-051", "premise": "A woman wearing a ball cap squats down to touch the cracked earth.", "hypothesis": "An archeologist wearing a hat squats to examine the site for a dig", "label": "neutral"}
+{"id": "snli-test-052", "premise": "A woman wearing a ball cap squats down to touch the cracked earth.", "hypothesis": "A squatting woman wearing a hat touching the ground.", "label": "entailment"}
+{"id": "snli-test-053", "premise": "A woman wearing a ball cap squats down to touch the cracked earth.", "hypothesis": "A woman wearing a sun bonnet planting a garden.", "label": "contradiction"}
+{"id": "snli-test-054", "premise": "Two children re laying on a rug with some wooden bricks laid out in a square between them.", "hypothesis": "Two children are building a brick furnace.", "label": "neutral"}
+{"id": "snli-test-055", "premise": "Two children re laying on a rug with some wooden bricks laid out in a square between them.", "hypothesis": "Two children are playing catch at a park.", "label": "contradiction"}
+{"id": "snli-test-056", "premise": "Two children re laying on a rug with some wooden bricks laid out in a square between them.", "hypothesis": "Two children are on a rug.", "label": "entailment"}
+{"id": "snli-test-057", "premise": "A man standing in front of a building on the phone as two men to the side pain on the side.", "hypothesis": "a guy near a building stands by two other men", "label": "entailment"}
+{"id": "snli-test-058", "premise": "A man standing in front of a building on the phone as two men to the side pain on the side.", "hypothesis": "two girls walk through a hall", "label": "contradiction"}
+{"id": "snli-test-059", "premise": "A man standing in front of a building on the phone as two men to the side pain on the side.", "hypothesis": "a busy man stands with bodyguards", "label": "neutral"}
+{"id": "snli-test-060", "premise": "The two young girls are dressed as fairies, and are playing in the leaves outdoors.", "hypothesis": "Girls are playing outdoors.", "label": "entailment"}
+{"id": "snli-test-061", "premise": "The two young girls are dressed as fairies, and are playing in the leaves outdoors.", "hypothesis": "Two girls play dress up indoors.", "label": "contradiction"}
+{"id": "snli-test-062", "premise": "The two young girls are dressed as fairies, and are playing in the leaves outdoors.", "hypothesis": "The two girls play in the Autumn.", "label": "neutral"}
+{"id": "snli-test-063", "premise": "People jump over a mountain crevasse on a rope.", "hypothesis": "Some people look visually afraid to jump.", "label": "neutral"}
+{"id": "snli-test-064", "premise": "People jump over a mountain crevasse on a rope.", "hypothesis": "People are jumping outside.", "label": "entailment"}
+{"id": "snli-test-065", "premise": "People jump over a mountain crevasse on a rope.", "hypothesis": "People slide over a mountain crevasse on a slide.", "label": "contradiction"}
+{"id": "snli-test-066", "premise": "A snowboarder on a wide plain of snow", "hypothesis": "A snow field with a snowboarder on it", "label": "entailment"}
+{"id": "snli-test-067", "premise": "A snowboarder on a wide plain of snow", "hypothesis": "A snowboarder gliding over a field of snow", "label": "neutral"}
+{"id": "snli-test-068", "premise": "A snowboarder on a wide plain of snow", "hypothesis": "A snowmobile in a blizzard", "label": "neutral"}
+{"id": "snli-test-069", "premise": "An older women tending to a garden.", "hypothesis": "The lady is cooking dinner", "label": "contradiction"}
+{"id": "snli-test-070", "premise": "An older women tending to a garden.", "hypothesis": "The lady is weeding her garden", "label": "neutral"}
+{"id": "snli-test-071", "premise": "An older women tending to a garden.", "hypothesis": "The lady has a garden", "label": "entailment"}
+{"id": "snli-test-072", "premise": "A man in a black shirt overlooking bike maintenance.", "hypothesis": "A man destroys a bike.", "label": "contradiction"}
+{"id": "snli-test-073", "premise": "A man in a black shirt overlooking bike maintenance.", "hypothesis": "A man watches bike repairs.", "label": "entailment"}
+{"id": "snli-test-074", "premise": "A man in a black shirt overlooking bike maintenance.", "hypothesis": "A man learns bike maintenance.", "label": "neutral"}
+{"id": "snli-test-075", "premise": "A man in a black shirt is looking at a bike in a workshop.", "hypothesis": "A man is wearing a red shirt", "label": "contradiction"}
+{"id": "snli-test-076", "premise": "A man in a black shirt is looking at a bike in a workshop.", "hypothesis": "A man is in a black shirt", "label": "entailment"}
+{"id": "snli-test-077", "premise": "A man in a black shirt is looking at a bike in a workshop.", "hypothesis": "A man is deciding which bike to buy", "label": "neutral"}
+{"id": "snli-test-078", "premise": "A man looking over a bicycle's rear wheel in the maintenance garage with various tools visible in the background.", "hypothesis": "A person is in a garage.", "label": "entailment"}
+{"id": "snli-test-079", "premise": "A man looking over a bicycle's rear wheel in the maintenance garage with various tools visible in the background.", "hypothesis": "A man repairs bicycles.", "label": "entailment"}
+{"id": "snli-test-080", "premise": "A man looking over a bicycle's rear wheel in the maintenance garage with various tools visible in the background.", "hypothesis": "A man waits outside a garage.", "label": "contradiction"}
+{"id": "snli-test-081", "premise": "Three people sit on a bench at a station, the man looks oddly at the two women, the redheaded women looks up and forward in an awkward position, and the yellow blond girl twiddles with her hair.", "hypothesis": "Some people stand around.", "label": "contradiction"}
+{"id": "snli-test-082", "premise": "Three people sit on a bench at a station, the man looks oddly at the two women, the redheaded women looks up and forward in an awkward position, and the yellow blond girl twiddles with her hair.", "hypothesis": "People run together.", "label": "contradiction"}
+{"id": "snli-test-083", "premise": "Three people sit on a bench at a station, the man looks oddly at the two women, the redheaded women looks up and forward in an awkward position, and the yellow blond girl twiddles with her hair.", "hypothesis": "People wait at a station.", "label": "entailment"}
+{"id": "snli-test-084", "premise": "A child wearing a red top is standing behind a blond headed child sitting in a wheelbarrow.", "hypothesis": "A child wearing a red top is standing behind a blond headed child", "label": "entailment"}
+{"id": "snli-test-085", "premise": "A child wearing a red top is standing behind a blond headed child sitting in a wheelbarrow.", "hypothesis": "A child wearing a red top is standing on top of a blond headed child", "label": "contradiction"}
+{"id": "snli-test-086", "premise": "A child wearing a red top is standing behind a blond headed child sitting in a wheelbarrow.", "hypothesis": "A child wearing a red top is standing behind a pretty blond headed child", "label": "neutral"}
+{"id": "snli-test-087", "premise": "A person dressed in a dress with flowers and a stuffed bee attached to it, is pushing a baby stroller down the street.", "hypothesis": "A lady sitting on a bench in the park.", "label": "contradiction"}
+{"id": "snli-test-088", "premise": "A person dressed in a dress with flowers and a stuffed bee attached to it, is pushing a baby stroller down the street.", "hypothesis": "An old lady pushing a stroller down a busy street.", "label": "neutral"}
+{"id": "snli-test-089", "premise": "A person dressed in a dress with flowers and a stuffed bee attached to it, is pushing a baby stroller down the street.", "hypothesis": "A person outside pushing a stroller.", "label": "entailment"}
+{"id": "snli-test-090", "premise": "A dog jumping for a Frisbee in the snow.", "hypothesis": "A pet is enjoying a game of fetch with his owner.", "label": "neutral"}
+{"id": "snli-test-091", "premise": "A dog jumping for a Frisbee in the snow.", "hypothesis": "A cat washes his face and whiskers with his front paw.", "label": "contradiction"}
+{"id": "snli-test-092", "premise": "A dog jumping for a Frisbee in the snow.", "hypothesis": "An animal is outside in the cold weather, playing with a plastic toy.", "label": "entailment"}
+{"id": "snli-test-093", "premise": "People are conversing at a dining table under a canopy.", "hypothesis": "People at a party are seated for dinner on the lawn.", "label": "neutral"}
+{"id": "snli-test-094", "premise": "People are conversing at a dining table under a canopy.", "hypothesis": "People are talking underneath a covering.", "label": "entailment"}
+{"id": "snli-test-095", "premise": "People are conversing at a dining table under a canopy.", "hypothesis": "People are screaming at a boxing match.", "label": "contradiction"}
+{"id": "snli-test-096", "premise": "A girl playing a violin along with a group of people", "hypothesis": "A girl is washing a load of laundry.", "label": "contradiction"}
+{"id": "snli-test-097", "premise": "A girl playing a violin along with a group of people", "hypothesis": "A girl is playing an instrument.", "label": "entailment"}
+{"id": "snli-test-098", "premise": "A girl playing a violin along with a group of people", "hypothesis": "A group of people are playing in a symphony.", "label": "neutral"}
+{"id": "snli-test-099", "premise": "A woman within an orchestra is playing a violin.", "hypothesis": "A woman is playing a concert.", "label": "neutral"}
+{"id": "snli-test-100", "premise": "A woman within an orchestra is playing a violin.", "hypothesis": "A woman is playing the violin.", "label": "entailment"}
+{"id": "snli-test-101", "premise": "A woman within an orchestra is playing a violin.", "hypothesis": "A man is looking in a telescope.", "label": "contradiction"}
+{"id": "snli-test-102", "premise": "Three men, one holding pipes, another holding a large object above his head, and one resting against the pipe bed on the truck, are looking at the camera.", "hypothesis": "three men going to work", "label": "neutral"}
+{"id": "snli-test-103", "premise": "Three men, one holding pipes, another holding a large object above his head, and one resting against the pipe bed on the truck, are looking at the camera.", "hypothesis": "three men look at the camera", "label": "entailment"}
+{"id": "snli-test-104", "premise": "Three men, one holding pipes, another holding a large object above his head, and one resting against the pipe bed on the truck, are looking at the camera.", "hypothesis": "three men sleeping in a tent", "label": "contradiction"}
+{"id": "snli-test-105", "premise": "A Ford car is making a right turn as 3 males are walking across the street behind the car.", "hypothesis": "A car making a right turn had three pedestrians cross behind it.", "label": "entailment"}
+{"id": "snli-test-106", "premise": "A Ford car is making a right turn as 3 males are walking across the street behind the car.", "hypothesis": "A sedan was turning a corner as walkers were crossing.", "label": "neutral"}
+{"id": "snli-test-107", "premise": "Three boys in white shirts are walking behind an older model Ford car.", "hypothesis": "there are three boys", "label": "entailment"}
+{"id": "snli-test-108", "premise": "Three boys in white shirts are walking behind an older model Ford car.", "hypothesis": "There are three girls", "label": "contradiction"}
+{"id": "snli-test-109", "premise": "Three boys in white shirts are walking behind an older model Ford car.", "hypothesis": "The boys are on the street", "label": "entailment"}
+{"id": "snli-test-110", "premise": "Three girls blow out the candles of a cake made of Peeps.", "hypothesis": "Some people are blowing out candles", "label": "entailment"}
+{"id": "snli-test-111", "premise": "Three girls blow out the candles of a cake made of Peeps.", "hypothesis": "There are three girls and a cake", "label": "entailment"}
+{"id": "snli-test-112", "premise": "Three girls blow out the candles of a cake made of Peeps.", "hypothesis": "There are peeps in the garden.", "label": "contradiction"}
+{"id": "snli-test-113", "premise": "A crowd of people looking up at 3 people on the edge of the roof of a building.", "hypothesis": "The crowd is calling for help for the people on the roof.", "label": "neutral"}
+{"id": "snli-test-114", "premise": "A crowd of people looking up at 3 people on the edge of the roof of a building.", "hypothesis": "The crowd on the ground is watching 3 people on the roof's edge.", "label": "entailment"}
+{"id": "snli-test-115", "premise": "A crowd of people looking up at 3 people on the edge of the roof of a building.", "hypothesis": "Three people are climbing down the ladder on the building.", "label": "contradiction"}
+{"id": "snli-test-116", "premise": "A woman working long hours.", "hypothesis": "A woman is working in a factory.", "label": "neutral"}
+{"id": "snli-test-117", "premise": "A woman working long hours.", "hypothesis": "A woman is working.", "label": "entailment"}
+{"id": "snli-test-118", "premise": "A woman working long hours.", "hypothesis": "A woman is sleeping.", "label": "contradiction"}
+{"id": "snli-test-119", "premise": "Two teenage girls conversing next to lockers.", "hypothesis": "Girls talking next to the toilet.", "label": "contradiction"}
+{"id": "snli-test-120", "premise": "Two teenage girls conversing next to lockers.", "hypothesis": "People talking next to lockers.", "label": "entailment"}
+{"id": "snli-test-121", "premise": "Two teenage girls conversing next to lockers.", "hypothesis": "Girls talking about their problems next to lockers.", "label": "neutral"}
+{"id": "snli-test-122", "premise": "An old woman watches a man look down at some balls on the ground.", "hypothesis": "An elderly female is stalking a male.", "label": "neutral"}
+{"id": "snli-test-123", "premise": "An old woman watches a man look down at some balls on the ground.", "hypothesis": "Two people are sleeping on the train.", "label": "contradiction"}
+{"id": "snli-test-124", "premise": "Two children, both wearing tan coats, are embracing one another.", "hypothesis": "Two kids are hugging after surviving a horrible car wreck.", "label": "neutral"}
+{"id": "snli-test-125", "premise": "Two children, both wearing tan coats, are embracing one another.", "hypothesis": "Two kids are hugging.", "label": "entailment"}
+{"id": "snli-test-126", "premise": "Two children, both wearing tan coats, are embracing one another.", "hypothesis": "Two kids are running down a highway.", "label": "contradiction"}
+{"id": "snli-test-127", "premise": "2 kids who look related are hanging out with 1 of them looking very emotional and hugging the other.", "hypothesis": "A couple of child relatives were hugging because they were happy to see each other.", "label": "neutral"}
+{"id": "snli-test-128", "premise": "2 kids who look related are hanging out with 1 of them looking very emotional and hugging the other.", "hypothesis": "Two kids were hugging.", "label": "entailment"}
+{"id": "snli-test-129", "premise": "2 kids who look related are hanging out with 1 of them looking very emotional and hugging the other.", "hypothesis": "Two youths were pushing each other.", "label": "contradiction"}
+{"id": "snli-test-130", "premise": "A large number of people wearing only white and red are walking on a street.", "hypothesis": "A large number of people wearing black walking down the street.", "label": "contradiction"}
+{"id": "snli-test-131", "premise": "A large number of people wearing only white and red are walking on a street.", "hypothesis": "A large number of men walking down the street in red and white.", "label": "neutral"}
+{"id": "snli-test-132", "premise": "A large number of people wearing only white and red are walking on a street.", "hypothesis": "A large number of people walking on a street.", "label": "entailment"}
+{"id": "snli-test-133", "premise": "A guy riding a motorcycle near junk cars", "hypothesis": "The man is test driving a motorcycle to decide whether or not he will buy it.", "label": "neutral"}
+{"id": "snli-test-134", "premise": "A guy riding a motorcycle near junk cars", "hypothesis": "A man is riding a motorcycle.", "label": "entailment"}
+{"id": "snli-test-135", "premise": "A guy riding a motorcycle near junk cars", "hypothesis": "A man is sitting on a parked motorcycle waiting for his friend.", "label": "contradiction"}
+{"id": "snli-test-136", "premise": "Women of India performing with blue streamers, in beautiful blue costumes.", "hypothesis": "indian women perform together in gorgeous costumes", "label": "entailment"}
+{"id": "snli-test-137", "premise": "Women of India performing with blue streamers, in beautiful blue costumes.", "hypothesis": "dogs sniff the air", "label": "contradiction"}
+{"id": "snli-test-138", "premise": "Women of India performing with blue streamers, in beautiful blue costumes.", "hypothesis": "indian women are performing a religious ritual together", "label": "neutral"}
+{"id": "snli-test-139", "premise": "A professional swimmer spits water out after surfacing while grabbing the hand of someone helping him back to land.", "hypothesis": "A person is swimming.", "label": "entailment"}
+{"id": "snli-test-140", "premise": "A professional swimmer spits water out after surfacing while grabbing the hand of someone helping him back to land.", "hypothesis": "The swimmer is eating a toasted marshmallow.", "label": "contradiction"}
+{"id": "snli-test-141", "premise": "A professional swimmer spits water out after surfacing while grabbing the hand of someone helping him back to land.", "hypothesis": "The swimmer almost drowned after being sucked under a fast current.", "label": "neutral"}
+{"id": "snli-test-142", "premise": "The man in the black wetsuit is walking out of the water.", "hypothesis": "A man in a wetsuit walks out of the water carrying a surfboard.", "label": "neutral"}
+{"id": "snli-test-143", "premise": "The man in the black wetsuit is walking out of the water.", "hypothesis": "a person is walking out of water.", "label": "entailment"}
+{"id": "snli-test-144", "premise": "The man in the black wetsuit is walking out of the water.", "hypothesis": "A man is laying on the beach.", "label": "contradiction"}
+{"id": "snli-test-145", "premise": "Five girls and two guys are crossing a overpass.", "hypothesis": "The extended family hike together on their family reunion.", "label": "neutral"}
+{"id": "snli-test-146", "premise": "Five girls and two guys are crossing a overpass.", "hypothesis": "The three men sit and talk about their lives.", "label": "contradiction"}
+{"id": "snli-test-147", "premise": "Five girls and two guys are crossing a overpass.", "hypothesis": "There are people outside.", "label": "entailment"}
+{"id": "snli-test-148", "premise": "A person with a purple shirt is painting an image of a woman on a white wall.", "hypothesis": "A woman paints a portrait of her best friend.", "label": "neutral"}
+{"id": "snli-test-149", "premise": "A person with a purple shirt is painting an image of a woman on a white wall.", "hypothesis": "A woman paints a portrait of a person.", "label": "neutral"}
+{"id": "snli-test-150", "premise": "A person with a purple shirt is painting an image of a woman on a white wall.", "hypothesis": "A woman paints a portrait of a monkey.", "label": "contradiction"}
+{"id": "snli-test-151", "premise": "A woman is painting a mural of a woman's face.", "hypothesis": "There is a woman painting.", "label": "entailment"}
+{"id": "snli-test-152", "premise": "A woman is painting a mural of a woman's face.", "hypothesis": "There is a woman painting for fun.", "label": "neutral"}
+{"id": "snli-test-153", "premise": "A woman is painting a mural of a woman's face.", "hypothesis": "There is a man tying his shoes.", "label": "contradiction"}
+{"id": "snli-test-154", "premise": "A couple is eating outside at a table and he is pointing at something.", "hypothesis": "A couple is eating inside at a table and he is pointing at something.", "label": "contradiction"}
+{"id": "snli-test-155", "premise": "A couple is eating outside at a table and he is pointing at something.", "hypothesis": "The man is pointing at a purse snatcher.", "label": "neutral"}
+{"id": "snli-test-156", "premise": "A couple is eating outside at a table and he is pointing at something.", "hypothesis": "People are eating at a table outside.", "label": "entailment"}
+{"id": "snli-test-157", "premise": "Two women walk down a sidewalk along a busy street in a downtown area.", "hypothesis": "The women were walking downtown because the buses were on strike", "label": "neutral"}
+{"id": "snli-test-158", "premise": "Two women walk down a sidewalk along a busy street in a downtown area.", "hypothesis": "The women were picking berries in the countryside", "label": "contradiction"}
+{"id": "snli-test-159", "premise": "Two women walk down a sidewalk along a busy street in a downtown area.", "hypothesis": "The women were walking downtown", "label": "entailment"}
+{"id": "snli-test-160", "premise": "Many people standing outside of a place talking to each other in front of a building that has a sign that says \"HI-POINTE.\"", "hypothesis": "The people are having a chat before going into the work building.", "label": "neutral"}
+{"id": "snli-test-161", "premise": "Many people standing outside of a place talking to each other in front of a building that has a sign that says \"HI-POINTE.\"", "hypothesis": "The group of people aren't inide of the building.", "label": "entailment"}
+{"id": "snli-test-162", "premise": "Many people standing outside of a place talking to each other in front of a building that has a sign that says \"HI-POINTE.\"", "hypothesis": "The people are sitting in the hotel lobby.", "label": "contradiction"}
+{"id": "snli-test-163", "premise": "The flight attendant dressed in yellow demonstrates life vest usage.", "hypothesis": "A flight attendant is standing in front of passengers.", "label": "neutral"}
+{"id": "snli-test-164", "premise": "The flight attendant dressed in yellow demonstrates life vest usage.", "hypothesis": "A flight attendant is demonstrating safety procedures before takeoff.", "label": "neutral"}
+{"id": "snli-test-165", "premise": "The flight attendant dressed in yellow demonstrates life vest usage.", "hypothesis": "A woman is preparing drinks on an airplane.", "label": "contradiction"}
+{"id": "snli-test-166", "premise": "The girls walk down the street.", "hypothesis": "Girls walk down the street.", "label": "entailment"}
+{"id": "snli-test-167", "premise": "The girls walk down the street.", "hypothesis": "Girls set down in the street.", "label": "contradiction"}
+{"id": "snli-test-168", "premise": "The girls walk down the street.", "hypothesis": "Girls were going to the park.", "label": "neutral"}
+{"id": "snli-test-169", "premise": "A man wearing a red uniform and helmet stands on his motorbike.", "hypothesis": "a man sitting in a car.", "label": "contradiction"}
+{"id": "snli-test-170", "premise": "A man wearing a red uniform and helmet stands on his motorbike.", "hypothesis": "a person standing.", "label": "entailment"}
+{"id": "snli-test-171", "premise": "A man wearing a red uniform and helmet stands on his motorbike.", "hypothesis": "a man standing on his motorbike.", "label": "entailment"}
+{"id": "snli-test-172", "premise": "A man of the cloth puts a black substance on a man's forehead.", "hypothesis": "The man puts something on the other mans head.", "label": "entailment"}
+{"id": "snli-test-173", "premise": "A man of the cloth puts a black substance on a man's forehead.", "hypothesis": "The women are at the park.", "label": "contradiction"}
+{"id": "snli-test-174", "premise": "A man of the cloth puts a black substance on a man's forehead.", "hypothesis": "The men are at church.", "label": "neutral"}
+{"id": "snli-test-175", "premise": "A person rolls down a hill riding a wagon as another watches.", "hypothesis": "Two people are outside.", "label": "entailment"}
+{"id": "snli-test-176", "premise": "A person rolls down a hill riding a wagon as another watches.", "hypothesis": "A person stares at an empty hill.", "label": "contradiction"}
+{"id": "snli-test-177", "premise": "A person rolls down a hill riding a wagon as another watches.", "hypothesis": "A child in a wagon rolls down a hill.", "label": "neutral"}
+{"id": "snli-test-178", "premise": "a boy holding onto the wall of an old brick house's raised foundation.", "hypothesis": "a boy holding onto the wall of an old brick house's raised foundation as construction occurs", "label": "neutral"}
+{"id": "snli-test-179", "premise": "a boy holding onto the wall of an old brick house's raised foundation.", "hypothesis": "a girl is leaning against the wall", "label": "contradiction"}
+{"id": "snli-test-180", "premise": "a boy holding onto the wall of an old brick house's raised foundation.", "hypothesis": "a boy is against the wall of a raised foundation", "label": "entailment"}
+{"id": "snli-test-181", "premise": "Bruce Springsteen, with one arm outstretched, is singing in the spotlight in a dark concert hall.", "hypothesis": "Bruce Springsteen is from Florida.", "label": "neutral"}
+{"id": "snli-test-182", "premise": "Bruce Springsteen, with one arm outstretched, is singing in the spotlight in a dark concert hall.", "hypothesis": "Bruce Springsteen is a singer.", "label": "entailment"}
+{"id": "snli-test-183", "premise": "Bruce Springsteen, with one arm outstretched, is singing in the spotlight in a dark concert hall.", "hypothesis": "Bruce Springsteen is gay", "label": "neutral"}
+{"id": "snli-test-184", "premise": "Six dogs swimming in a river.", "hypothesis": "Six dogs swim across the river.", "label": "neutral"}
+{"id": "snli-test-185", "premise": "Six dogs swimming in a river.", "hypothesis": "Six dogs are outdoors.", "label": "entailment"}
+{"id": "snli-test-186", "premise": "Six dogs swimming in a river.", "hypothesis": "The puppies are setting on the couch.", "label": "contradiction"}
+{"id": "snli-test-187", "premise": "A man and woman are taking a picture of themselves while a woman in a scarf walks by them.", "hypothesis": "A man and woman have mug shots taken because they have been arrested.", "label": "contradiction"}
+{"id": "snli-test-188", "premise": "A man and woman are taking a picture of themselves while a woman in a scarf walks by them.", "hypothesis": "A man and woman take selfies while a woman walks by and judges them.", "label": "neutral"}
+{"id": "snli-test-189", "premise": "A man and woman are taking a picture of themselves while a woman in a scarf walks by them.", "hypothesis": "A man and woman take selfies of themselves.", "label": "entailment"}
+{"id": "snli-test-190", "premise": "a group of people dancing together.", "hypothesis": "People are dancing.", "label": "entailment"}
+{"id": "snli-test-191", "premise": "a group of people dancing together.", "hypothesis": "They are doing the tango.", "label": "neutral"}
+{"id": "snli-test-192", "premise": "a group of people dancing together.", "hypothesis": "No one is dancing.", "label": "contradiction"}
+{"id": "snli-test-193", "premise": "Men wearing blue uniforms sit on a bus.", "hypothesis": "Men sit on the bus going to work,", "label": "neutral"}
+{"id": "snli-test-194", "premise": "Men wearing blue uniforms sit on a bus.", "hypothesis": "Men drive the bus into the ocean.", "label": "contradiction"}
+{"id": "snli-test-195", "premise": "Two men climbing on a wooden scaffold.", "hypothesis": "Two women climbing on a wooden scaffold.", "label": "contradiction"}
+{"id": "snli-test-196", "premise": "Two men climbing on a wooden scaffold.", "hypothesis": "Two sad men climbing on a wooden scaffold.", "label": "neutral"}
+{"id": "snli-test-197", "premise": "A bird is flapping its wings on the water.", "hypothesis": "The bird is flying over the trees.", "label": "contradiction"}
+{"id": "snli-test-198", "premise": "A bird is flapping its wings on the water.", "hypothesis": "The duck is swimming in the lake.", "label": "neutral"}
+{"id": "snli-test-199", "premise": "A young boy wearing a red shirt and jeans stands in the middle of a field and throws a toy plane in the air.", "hypothesis": "A young boy is playing in the field because his mother kicked him out of the house.", "label": "neutral"}
+{"id": "snli-test-200", "premise": "A young boy wearing a red shirt and jeans stands in the middle of a field and throws a toy plane in the air.", "hypothesis": "A young boy is playing video games indoors.", "label": "contradiction"}

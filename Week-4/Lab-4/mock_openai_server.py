@@ -110,13 +110,16 @@ class Handler(BaseHTTPRequestHandler):
             parts = [f"token{i} " for i in range(count)]
             return "".join(parts), parts
         task: Task = self.server.task  # type: ignore[attr-defined]
-        index, example = next(
-            (
-                (number, row)
-                for number, row in enumerate(self.server.examples)  # type: ignore[attr-defined]
-                if task.prompting.task_example(row, include_answer=False) in prompt
-            ),
-            (0, self.server.examples[0]),  # type: ignore[attr-defined]
+        # The longest matching item, in case one item's text starts another's.
+        matches = [
+            (number, row)
+            for number, row in enumerate(self.server.examples)  # type: ignore[attr-defined]
+            if task.prompting.task_example(row, include_answer=False) in prompt
+        ]
+        index, example = (
+            max(matches, key=lambda m: len(task.prompting.task_example(m[1], include_answer=False)))
+            if matches
+            else (0, self.server.examples[0])  # type: ignore[attr-defined]
         )
         label = example["label"]
         # Deliberate, deterministic differences so the smoke test can check them.

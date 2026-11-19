@@ -8,12 +8,9 @@ OUT="results/smoke"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 FAST="--requests 8 --warmup 1 --max-tokens 6"
-# The Lab 2 task to test with: an argument, else your own task if you made
-# one in Lab 2, else the bundled example.
-LAB2="../../Week-2/Lab-2/configs"
-if [[ -n "${1:-}" ]]; then TASK="$1"
-elif [[ -f "$LAB2/my-task.json" ]]; then TASK="$LAB2/my-task.json"
-else TASK="$LAB2/roihu.json"; fi
+# The task to test with: the ready-made example, or your own Lab 2 task
+# config given as an argument (bash run_smoke_test.sh ../../Week-2/Lab-2/configs/my-task.json).
+TASK="${1:-example/configs/example.json}"
 echo "Smoke test with the task $TASK"
 
 # "Hugging Face" with a fake model

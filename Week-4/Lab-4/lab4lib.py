@@ -14,7 +14,8 @@ from pathlib import Path
 from typing import Any, Iterable
 
 LAB4_DIR = Path(__file__).resolve().parent
-DEFAULT_TASK_CONFIG = LAB4_DIR.parent.parent / "Week-2" / "Lab-2" / "configs" / "roihu.json"
+# The ready-made example task (example/README.md); your own Lab 2 task is optional.
+DEFAULT_TASK_CONFIG = LAB4_DIR / "example" / "configs" / "example.json"
 
 
 def utc_now() -> str:
@@ -186,8 +187,8 @@ class Task:
             raise SystemExit(
                 f"{self.config_path} is not a Lab 2 task config: it has no "
                 f"{' or '.join(missing) or 'task.labels or data.test'} entry.\n"
-                "Use a config made in Lab 2 step 7 (copied from Week-2/Lab-2/configs/roihu.json),\n"
-                "for example ../../Week-2/Lab-2/configs/my-task.json, or roihu.json for the example.\n"
+                "Use a config made in Lab 2 step 7, for example ../../Week-2/Lab-2/configs/my-task.json,\n"
+                "or the ready-made example task: example/configs/example.json.\n"
                 "configs/model.json is the server config, not a task config."
             )
         self.name = config["task"].get("name", "task")
@@ -404,13 +405,16 @@ class MockHFBackend:
         answers = []
         for messages in batch:
             text = "\n".join(m["content"] for m in messages)
-            label = next(
-                (
-                    row["label"]
-                    for row in self.task.test_examples()
-                    if self.task.prompting.task_example(row, include_answer=False) in text
-                ),
-                self.task.labels[0],
+            # The longest matching item, in case one item's text starts another's.
+            matches = [
+                row
+                for row in self.task.test_examples()
+                if self.task.prompting.task_example(row, include_answer=False) in text
+            ]
+            label = (
+                max(matches, key=lambda row: len(self.task.prompting.task_example(row, include_answer=False)))["label"]
+                if matches
+                else self.task.labels[0]
             )
             answers.append(f"Label: {label}")
         return answers

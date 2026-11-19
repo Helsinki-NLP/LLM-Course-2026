@@ -2,8 +2,10 @@
 """Evaluation: score the Lab 2 test set, with the Lab 2 prompt and scorer.
 
 Usage:
-    python3 score_task.py --backend hf     --task-config ../../Week-2/Lab-2/configs/my-task.json --output-dir results/hf
-    python3 score_task.py --backend server --task-config ../../Week-2/Lab-2/configs/my-task.json --output-dir results/vllm
+    python3 score_task.py --backend hf     --task-config $TASK --output-dir results/hf
+    python3 score_task.py --backend server --task-config $TASK --output-dir results/vllm
+
+Without --task-config, the ready-made example task is used.
 
 --limit sets how many test examples are used (default 100; 0 means all).
 """

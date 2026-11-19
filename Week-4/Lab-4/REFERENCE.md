@@ -117,7 +117,7 @@ lines for each step 6 option (see README step 2):
 
 ```bash
 mkdir -p logs
-sbatch slurm/lab4.slurm ../../Week-2/Lab-2/configs/my-task.json
+sbatch slurm/lab4.slurm      # or add your Lab 2 task config first
 ```
 
 Add `hf` or `vllm` after the task config to run only one backend. The log is

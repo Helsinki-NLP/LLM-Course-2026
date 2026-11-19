@@ -10,7 +10,7 @@ The schema is sent with the standard OpenAI field
 response_format={"type": "json_schema", ...}.
 
 Usage:
-    python3 evaluate_structured.py --task-config ../../Week-2/Lab-2/configs/my-task.json --output-dir results/json
+    python3 evaluate_structured.py --task-config $TASK --output-dir results/json
 """
 
 from __future__ import annotations

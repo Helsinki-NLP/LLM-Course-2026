@@ -1,0 +1,10 @@
+{
+  "experiment_name": "lab4-example",
+  "task": {
+    "name": "snli-example",
+    "labels": ["entailment", "neutral", "contradiction"]
+  },
+  "data": {
+    "test": "data/test.jsonl"
+  }
+}
