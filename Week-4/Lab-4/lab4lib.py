@@ -199,8 +199,10 @@ class Task:
                 raise SystemExit(
                     f"The test data {self.test_path} (line {bad + 1}) has the fields {sorted(rows[bad])},\n"
                     f"but Lab 2's lab2lib/prompting.py expects {fields[:-1]} (TASK_FIELDS) and 'label'.\n"
-                    "Use the task config that matches your prompting.py, for example\n"
-                    "../../Week-2/Lab-2/configs/my-task.json."
+                    "The data and the prompt are for different tasks. Either set TASK_FIELDS (and\n"
+                    "TASK_SYSTEM) at the top of Week-2/Lab-2/lab2lib/prompting.py for this data,\n"
+                    "or use the task config that matches your prompting.py.\n"
+                    "If you used git stash to pull, run git stash pop to get your edits back."
                 )
             self._test = rows
         return self._test
