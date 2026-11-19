@@ -242,6 +242,7 @@ python3 evaluate_structured.py --task-config $TASK --output-dir results/vllm-jso
 | `ModuleNotFoundError` in step 3 | run the Lab 2 install in step 1 |
 | `The server stopped during start-up` | read the lines it prints; the full log is `.server/vllm.log`. If you are stuck, send the last 30 lines of it to the teacher |
 | the vLLM log says the model architecture is not supported | the vLLM module is too old for Qwen3.5 (needs 0.17 or newer); tell the teacher |
+| `No module named 'cutlass'` (from `flashinfer`) | `git pull`: the configs now add `--gdn-prefill-backend triton`, which avoids that library |
 | `Connection refused` | the server is not running: `bash scripts/start_server.sh` |
 | out of GPU memory when Hugging Face runs | stop the vLLM server first: `bash scripts/stop_server.sh` |
 | accuracy 0, or many answers without a label | check `TASK` and that `lab2lib/prompting.py` is the one you used in Lab 2 |

@@ -74,7 +74,7 @@ Settings in `configs/model.json`:
 | `max_model_len` | longest prompt plus answer, in tokens |
 | `gpu_memory_utilization` | share of GPU memory vLLM may use for weights and KV cache |
 | `quantization` | `null` for bf16, `"fp8"` for FP8 weights |
-| `extra_args` | `--no-enable-prefix-caching`: prefix caching off, so repeated prompt starts do not speed up the benchmark |
+| `extra_args` | `--no-enable-prefix-caching`: prefix caching off, so repeated prompt starts do not speed up the benchmark; `--gdn-prefill-backend triton`: Triton kernels for Qwen3.5's linear-attention layers, because the default FlashInfer kernel needs `cutlass`, which Roihu's vLLM module lacks |
 
 The server uses port 8000, or a free port if 8000 is taken on the node; the
 port in use is in `.server/port`. You can talk to the server directly while it

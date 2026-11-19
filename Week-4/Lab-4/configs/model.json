@@ -7,6 +7,8 @@
   "gpu_memory_utilization": 0.8,
   "port": 8000,
   "extra_args": [
-    "--no-enable-prefix-caching"
+    "--no-enable-prefix-caching",
+    "--gdn-prefill-backend",
+    "triton"
   ]
 }
