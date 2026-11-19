@@ -8,6 +8,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import sys
 
@@ -18,7 +19,7 @@ def command(config: dict) -> list[str]:
         "--revision", config["revision"],
         "--served-model-name", "task",
         "--host", "127.0.0.1",
-        "--port", str(config["port"]),
+        "--port", os.environ.get("LAB4_PORT", str(config["port"])),
         "--dtype", "bfloat16",
         "--max-model-len", str(config["max_model_len"]),
         "--gpu-memory-utilization", str(config["gpu_memory_utilization"]),

@@ -162,6 +162,11 @@ def load_model_config(path: str | Path) -> dict[str, Any]:
     adapter = config.get("adapter")
     # vLLM serves a LoRA adapter under its own name next to the base model.
     config["request_model"] = adapter["name"] if adapter else "task"
+    # start_server.sh may move the server to a free port (other people's
+    # servers can run on the same node); it writes the port it used here.
+    port_file = LAB4_DIR / ".server" / "port"
+    if config.get("model") != "mock" and port_file.exists():
+        config["port"] = int(port_file.read_text().strip())
     return config
 
 

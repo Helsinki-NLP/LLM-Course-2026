@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PID_FILE="$ROOT/.server/server.pid"
+rm -f "$ROOT/.server/port"
 [[ -f "$PID_FILE" ]] || exit 0
 PID="$(cat "$PID_FILE")"
 if kill -0 "$PID" 2>/dev/null; then

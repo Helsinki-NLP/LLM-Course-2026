@@ -16,6 +16,7 @@
 #   cd ~/LLM-Course-2026/Week-4/Lab-4
 #   mkdir -p logs
 #   sbatch slurm/lab4.slurm ../../Week-2/Lab-2/configs/my-task.json          # everything
+#   sbatch slurm/lab4.slurm          # the same: uses my-task.json if you have one
 #
 # or as two shorter jobs, one per backend (they can run in either order):
 #
@@ -35,7 +36,23 @@ if [[ "$(uname -m)" != "aarch64" ]]; then
   echo "ERROR: not a GH200 node. Submit from ssh roihu-gpu.csc.fi." >&2
   exit 1
 fi
-TASK="${1:-../../Week-2/Lab-2/configs/roihu.json}"   # your Lab 2 task config
+if [[ ! -f lab4lib.py ]]; then
+  echo "ERROR: submit the job from the lab folder:" >&2
+  echo "  cd ~/LLM-Course-2026/Week-4/Lab-4 && sbatch slurm/lab4.slurm" >&2
+  exit 1
+fi
+# Arguments: [TASK_CONFIG] [all|hf|vllm]. Without a task config, use your own
+# task if you made one in Lab 2 (my-task.json), else the bundled example.
+if [[ "${1:-}" == all || "${1:-}" == hf || "${1:-}" == vllm ]]; then set -- "" "$1"; fi
+LAB2="../../Week-2/Lab-2/configs"
+if [[ -n "${1:-}" ]]; then TASK="$1"
+elif [[ -f "$LAB2/my-task.json" ]]; then TASK="$LAB2/my-task.json"
+else TASK="$LAB2/roihu.json"; fi
+if [[ ! -f "$TASK" ]]; then
+  echo "ERROR: the task config $TASK does not exist. The configs you have:" >&2
+  ls "$LAB2" >&2
+  exit 1
+fi
 PART="${2:-all}"                                       # all, hf or vllm
 case "$PART" in all|hf|vllm) ;; *) echo "ERROR: the second argument must be all, hf or vllm" >&2; exit 1;; esac
 OUT="results/batch"

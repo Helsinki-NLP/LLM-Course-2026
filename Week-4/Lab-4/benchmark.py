@@ -135,7 +135,7 @@ def main() -> None:
             first_error = next((row.get("error") for row in rows if row.get("error")), "unknown")
             raise SystemExit(
                 f"All {count} requests failed at concurrency {concurrency}. First error: {first_error}\n"
-                "Is the server running? Try: curl http://127.0.0.1:8000/health"
+                "Is the server running? Start it with: bash scripts/start_server.sh"
             )
         print(
             f"concurrency {concurrency:>3}: first token {level['ttft_ms_p50']:.0f} ms, "

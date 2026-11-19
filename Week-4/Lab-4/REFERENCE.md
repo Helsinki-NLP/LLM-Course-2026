@@ -76,7 +76,9 @@ Settings in `configs/model.json`:
 | `quantization` | `null` for bf16, `"fp8"` for FP8 weights |
 | `extra_args` | `--no-enable-prefix-caching`: prefix caching off, so repeated prompt starts do not speed up the benchmark |
 
-You can talk to the server directly while it runs:
+The server uses port 8000, or a free port if 8000 is taken on the node; the
+port in use is in `.server/port`. You can talk to the server directly while it
+runs (change 8000 if needed):
 
 ```bash
 curl http://127.0.0.1:8000/v1/models

@@ -79,6 +79,9 @@ mkdir -p logs
 sbatch slurm/lab4.slurm ../../Week-2/Lab-2/configs/my-task.json
 ```
 
+Without a task config, the job uses `my-task.json` if you have one and the
+bundled example otherwise. Submit from the lab folder, as above.
+
 ✓ `sbatch` prints `Submitted batch job JOBID`. Follow the job with
 `tail -f logs/lab4-JOBID.out` (Ctrl+C stops watching, not the job). It runs
 steps 3, 4 and 5 and writes the results to `results/batch/`; the tables of
@@ -122,7 +125,8 @@ python3 score_task.py --backend server --task-config $TASK --output-dir results/
 ```
 
 ✓ `start_server.sh` prints `Ready: http://127.0.0.1:8000/v1` after a minute or
-two. The other two commands print the same kind of lines as in step 3.
+two. If someone else's server already uses port 8000 on the same node, yours
+gets another free port; the other scripts find it automatically. The other two commands print the same kind of lines as in step 3.
 
 With vLLM, "concurrency 8" means 8 requests sent to the server at the same
 time. Keep the server running for step 6.
@@ -233,7 +237,7 @@ python3 evaluate_structured.py --task-config $TASK --output-dir results/vllm-jso
 | batch job: `ERROR: not a GH200 node` | submit from `ssh roihu-gpu.csc.fi`, not from the browser's CPU side |
 | the first Hugging Face or vLLM command is slow | it downloads the model (about 2 GB) once; later runs reuse it |
 | `ModuleNotFoundError` in step 3 | run the Lab 2 install in step 1 |
-| `The server stopped during start-up` | read the lines it prints; the full log is `.server/vllm.log` |
+| `The server stopped during start-up` | read the lines it prints; the full log is `.server/vllm.log`. If you are stuck, send the last 30 lines of it to the teacher |
 | the vLLM log says the model architecture is not supported | the vLLM module is too old for Qwen3.5 (needs 0.17 or newer); tell the teacher |
 | `Connection refused` | the server is not running: `bash scripts/start_server.sh` |
 | out of GPU memory when Hugging Face runs | stop the vLLM server first: `bash scripts/stop_server.sh` |
