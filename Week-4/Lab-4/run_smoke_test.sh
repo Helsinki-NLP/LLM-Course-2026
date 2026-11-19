@@ -8,17 +8,24 @@ OUT="results/smoke"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 FAST="--requests 8 --warmup 1 --max-tokens 6"
+# The Lab 2 task to test with: an argument, else your own task if you made
+# one in Lab 2, else the bundled example.
+LAB2="../../Week-2/Lab-2/configs"
+if [[ -n "${1:-}" ]]; then TASK="$1"
+elif [[ -f "$LAB2/my-task.json" ]]; then TASK="$LAB2/my-task.json"
+else TASK="$LAB2/roihu.json"; fi
+echo "Smoke test with the task $TASK"
 
 # "Hugging Face" with a fake model
 python3 benchmark.py --backend hf --config configs/mock.json --output-dir "$OUT/hf" $FAST
-python3 score_task.py --backend hf --config configs/mock.json --output-dir "$OUT/hf"
+python3 score_task.py --backend hf --config configs/mock.json --task-config "$TASK" --output-dir "$OUT/hf"
 
 # "vLLM" with a fake server, on a free port so that several people can run
 # the smoke test on the same login node at once
 PORT="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
 MOCK="$OUT/mock.json"
 python3 -c 'import json, sys; c = json.load(open("configs/mock.json")); c["port"] = int(sys.argv[1]); json.dump(c, open(sys.argv[2], "w"))' "$PORT" "$MOCK"
-python3 mock_openai_server.py --port "$PORT" >"$OUT/mock-server.log" 2>&1 &
+python3 mock_openai_server.py --port "$PORT" --task-config "$TASK" >"$OUT/mock-server.log" 2>&1 &
 SERVER_PID=$!
 trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
 READY=0
@@ -35,8 +42,8 @@ if [[ "$READY" != 1 ]]; then
   exit 1
 fi
 python3 benchmark.py --backend server --config "$MOCK" --output-dir "$OUT/vllm" $FAST
-python3 score_task.py --backend server --config "$MOCK" --output-dir "$OUT/vllm"
-python3 evaluate_structured.py --config "$MOCK" --output-dir "$OUT/vllm"
+python3 score_task.py --backend server --config "$MOCK" --task-config "$TASK" --output-dir "$OUT/vllm"
+python3 evaluate_structured.py --config "$MOCK" --task-config "$TASK" --output-dir "$OUT/vllm"
 
 python3 summarize_results.py "$OUT"
 python3 show_differences.py "$OUT/hf" "$OUT/vllm" >/dev/null

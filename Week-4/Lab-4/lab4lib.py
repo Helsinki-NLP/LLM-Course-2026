@@ -191,7 +191,19 @@ class Task:
         return module
 
     def test_examples(self) -> list[dict[str, Any]]:
-        return load_jsonl(self.test_path)
+        if not hasattr(self, "_test"):
+            rows = load_jsonl(self.test_path)
+            fields = list(getattr(self.prompting, "TASK_FIELDS", ())) + ["label"]
+            missing = [f for f in fields if rows and f not in rows[0]]
+            if missing:
+                raise SystemExit(
+                    f"The test data {self.test_path} has the fields {sorted(rows[0])},\n"
+                    f"but Lab 2's lab2lib/prompting.py expects {fields[:-1]} (TASK_FIELDS) and 'label'.\n"
+                    "Use the task config that matches your prompting.py, for example\n"
+                    "../../Week-2/Lab-2/configs/my-task.json."
+                )
+            self._test = rows
+        return self._test
 
     def messages(self, record: dict[str, Any]) -> list[dict[str, str]]:
         """The zero-shot Lab 2 prompt, as used for the fine-tuned model."""

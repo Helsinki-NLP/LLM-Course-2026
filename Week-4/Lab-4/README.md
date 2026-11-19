@@ -40,7 +40,10 @@ cd ~/LLM-Course-2026/Week-4/Lab-4
 bash run_smoke_test.sh
 ```
 
-✓ The last line is `Local smoke test completed.` (fake models, no GPU).
+✓ The last line is `Local smoke test completed.` (fake models, no GPU). It
+tests with your own task if `Week-2/Lab-2/configs/my-task.json` exists, and
+with the bundled example otherwise; to choose another task, add its config:
+`bash run_smoke_test.sh ../../Week-2/Lab-2/configs/OTHER.json`.
 
 The Hugging Face part uses the packages from Lab 2, and model downloads go
 to the project's scratch disk. If you have not done Lab 2 step 3, do it now:
@@ -235,5 +238,6 @@ python3 evaluate_structured.py --task-config $TASK --output-dir results/vllm-jso
 | `Connection refused` | the server is not running: `bash scripts/start_server.sh` |
 | out of GPU memory when Hugging Face runs | stop the vLLM server first: `bash scripts/stop_server.sh` |
 | accuracy 0, or many answers without a label | check `TASK` and that `lab2lib/prompting.py` is the one you used in Lab 2 |
+| `The test data … has the fields …` | `TASK` and `lab2lib/prompting.py` are for different tasks: use the config of the task your `prompting.py` is for (usually `my-task.json`) |
 
 Stuck for more than ten minutes? Ask.
