@@ -181,6 +181,15 @@ class Task:
         self.config_path = Path(config_path).resolve()
         self.lab2_dir = self.config_path.parent.parent
         config = json.loads(self.config_path.read_text(encoding="utf-8"))
+        missing = [key for key in ("task", "data") if key not in config]
+        if missing or "labels" not in config.get("task", {}) or "test" not in config.get("data", {}):
+            raise SystemExit(
+                f"{self.config_path} is not a Lab 2 task config: it has no "
+                f"{' or '.join(missing) or 'task.labels or data.test'} entry.\n"
+                "Use a config made in Lab 2 step 7 (copied from Week-2/Lab-2/configs/roihu.json),\n"
+                "for example ../../Week-2/Lab-2/configs/my-task.json, or roihu.json for the example.\n"
+                "configs/model.json is the server config, not a task config."
+            )
         self.name = config["task"].get("name", "task")
         self.labels: list[str] = list(config["task"]["labels"])
         self.test_path = self.lab2_dir / config["data"]["test"]
