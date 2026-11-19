@@ -90,7 +90,8 @@ Each `results/<run>/` folder contains:
 - `speed-summary.json`: median and p95 TTFT and TPOT and throughput per level;
 - `speed-requests.jsonl`: one line per benchmark request;
 - `eval-summary.json`: accuracy, number of examples, time;
-- `eval-answers.jsonl`: every test answer, the prediction and the gold label.
+- `eval-answers.jsonl`: every test answer, the prediction and the gold label
+  (for `score_labels.py`, the score of every label instead of an answer).
 
 `summarize_results.py results` prints all runs as tables and writes
 `results/speed.csv`.

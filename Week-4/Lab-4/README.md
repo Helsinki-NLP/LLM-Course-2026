@@ -39,13 +39,14 @@ bash run_smoke_test.sh
 
 ✓ The last line is `Local smoke test completed.` (fake models, no GPU).
 
-The Hugging Face part uses the packages from Lab 2. If you have not done
-Lab 2 step 3, do it now:
+The Hugging Face part uses the packages from Lab 2, and model downloads go
+to the project's scratch disk. If you have not done Lab 2 step 3, do it now:
 
 ```bash
 module purge
 module load python-pytorch/2.13
 python3 -m pip install --user -r ../../Week-2/Lab-2/requirements-roihu.txt
+echo 'export HF_HOME=/scratch/project_2021893/$USER/hf' >> ~/.bashrc && source ~/.bashrc
 ```
 
 ## 2. Start an interactive GPU session
@@ -58,7 +59,8 @@ TASK=../../Week-2/Lab-2/configs/my-task.json
 
 `TASK` is the config of your Lab 2 task. Without your own task, use
 `TASK=../../Week-2/Lab-2/configs/roihu.json` (the small example). If the
-session ends, start a new one and set `TASK` again.
+session ends, start a new one, `cd` to the lab folder, set `TASK` again, and
+repeat the two `module` lines of step 3 before any Hugging Face command.
 
 ## 3. Hugging Face: speed and accuracy
 
@@ -118,16 +120,19 @@ python3 benchmark.py --backend hf --output-dir results/hf-knee --concurrency 1 4
 ```
 
 **B. Prompt length.** How does the time to first token depend on the length
-of the prompt? Write a file with short and one with long prompts (one per
-line, like `configs/benchmark-prompts.txt`) and run:
+of the prompt? Write two files, one with short prompts and one with long
+prompts (one prompt per line, like `configs/benchmark-prompts.txt`), and run
+the benchmark once for each:
 ```bash
+python3 benchmark.py --backend server --output-dir results/vllm-short --prompts my-short-prompts.txt
 python3 benchmark.py --backend server --output-dir results/vllm-long --prompts my-long-prompts.txt
 ```
 
 **C. Predict, then measure.** Before measuring, estimate the maximum tokens per
-second for one user from the memory bandwidth (about 4 TB/s) and the model
-size (about 1.6 GB in bf16). Then compare with your concurrency-1 number and
-explain the gap.
+second for one user: memory bandwidth (about 4 TB/s) divided by the model
+size (about 1.6 GB in bf16). Then compare it with what you measured in step 4:
+at concurrency 1, one user gets about 1000 / (time per token in ms) tokens per
+second. Explain the gap.
 
 **D. Your own workload.** Use prompts and an answer length typical of your
 task (`--prompts`, `--max-tokens`). Does vLLM's advantage over Hugging Face
@@ -135,14 +140,22 @@ hold for your workload?
 
 **E. Your language.** How many tokens per word does your task data need?
 Translate 10 to 20 of your examples into another language (or take them from
-a parallel dataset), count the tokens per word for both, and work out what the
-difference means for speed in words per second and for cost. The notebook
-(section 4) has the code to start from.
+a parallel dataset), save them one per line, and compare. The script also
+turns your step 4 speed into words per second:
+```bash
+python3 tokens_per_word.py --task-config $TASK --compare my-translations.txt
+```
+What does the difference mean for speed and for cost?
 
 **F. Score instead of generate.** For a classification task, score each label
-(one forward pass, prefill only) instead of generating an answer. Compare
-accuracy and time with generation. The notebook (section 4) has the code to
-start from.
+(one forward pass, prefill only) instead of generating an answer, with
+Hugging Face as in step 3:
+```bash
+python3 score_labels.py --task-config $TASK --output-dir results/hf-scoring
+```
+`summarize_results.py` then shows it next to generation (`results/hf`).
+Compare accuracy and time. If your Lab 2 prompt makes the model start its
+answer with something other than `Label: `, pass it with `--answer-prefix`.
 
 ## 7. Stop and keep the results
 
@@ -183,6 +196,7 @@ see [REFERENCE.md](REFERENCE.md).
 | Problem | Fix |
 |---|---|
 | `srun` waits a long time | the GPUs are busy; wait, or try again later |
+| the first Hugging Face or vLLM command is slow | it downloads the model (about 2 GB) once; later runs reuse it |
 | `ModuleNotFoundError` in step 3 | run the Lab 2 install in step 1 |
 | `The server stopped during start-up` | read the lines it prints; the full log is `.server/vllm.log` |
 | the vLLM log says the model architecture is not supported | the vLLM module is too old for Qwen3.5 (needs 0.17 or newer); tell the teacher |
