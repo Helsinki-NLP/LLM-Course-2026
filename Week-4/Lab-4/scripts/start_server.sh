@@ -49,8 +49,10 @@ echo $! >"$ROOT/.server/server.pid"
 
 for _ in $(seq 600); do
   if ! kill -0 "$(cat "$ROOT/.server/server.pid")" 2>/dev/null; then
-    echo "The server stopped during start-up. Last lines of the log:" >&2
-    tail -n 30 "$LOG" >&2
+    echo "The server stopped during start-up. The error lines in the log:" >&2
+    grep -i -E "error|out of memory|not supported|exception" "$LOG" | grep -v 'File "' | head -n 20 >&2 || true
+    echo "--- last lines of $LOG:" >&2
+    tail -n 15 "$LOG" >&2
     exit 1
   fi
   if curl --noproxy '*' --fail --silent "http://127.0.0.1:${PORT}/health" >/dev/null; then
