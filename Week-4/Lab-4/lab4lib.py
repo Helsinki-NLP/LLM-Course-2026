@@ -194,10 +194,10 @@ class Task:
         if not hasattr(self, "_test"):
             rows = load_jsonl(self.test_path)
             fields = list(getattr(self.prompting, "TASK_FIELDS", ())) + ["label"]
-            missing = [f for f in fields if rows and f not in rows[0]]
-            if missing:
+            bad = next((i for i, row in enumerate(rows) if any(f not in row for f in fields)), None)
+            if bad is not None:
                 raise SystemExit(
-                    f"The test data {self.test_path} has the fields {sorted(rows[0])},\n"
+                    f"The test data {self.test_path} (line {bad + 1}) has the fields {sorted(rows[bad])},\n"
                     f"but Lab 2's lab2lib/prompting.py expects {fields[:-1]} (TASK_FIELDS) and 'label'.\n"
                     "Use the task config that matches your prompting.py, for example\n"
                     "../../Week-2/Lab-2/configs/my-task.json."
