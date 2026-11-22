@@ -1,0 +1,11 @@
+What are difference ways to incorporate embeddings into search?
+What is RAG?
+Can you list the authors of the book? -- fail
+
+What books has Trey Grainger written?
+What books has Doug Turnbull written?
+What is Max Irwin know for?
+
+Does the book recommend any podcasts or blogs?
+
+What is binary quantization?
