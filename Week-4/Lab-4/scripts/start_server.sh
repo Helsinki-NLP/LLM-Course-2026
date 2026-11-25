@@ -11,6 +11,14 @@ export HF_HOME="${HF_HOME:-/scratch/project_2021893/${USER}/hf}"
 mkdir -p "$HF_HOME" "$ROOT/.server"
 
 bash "$ROOT/scripts/stop_server.sh" >/dev/null
+# vLLM needs a GPU. On the login node, or in a session without one, stop here.
+if [[ -z "${CUDA_VISIBLE_DEVICES:-}" ]] && ! compgen -G "/dev/nvidia[0-9]*" >/dev/null; then
+  echo "ERROR: this session has no GPU, so vLLM cannot start." >&2
+  echo "Start a GPU session first (README step 2):" >&2
+  echo "  srun --account=project_2021893 --partition=gpuinteractive --gres=gpu:gh200:1 --time=01:00:00 --pty bash" >&2
+  echo "or use the batch job: sbatch slurm/lab4.slurm" >&2
+  exit 1
+fi
 # Use the port from the config, or a free one if someone else's server already
 # uses it on this node. The other scripts read the port from .server/port.
 PORT="$(python3 - "$CONFIG" <<'PY'
